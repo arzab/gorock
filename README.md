@@ -29,6 +29,11 @@ Gorock is a framework for automating routine tasks, making Go developers' work e
 
 ## Getting started
 
+0. Set your go variables
+```sh
+go env -w GOPATH=$HOME/go GOBIN=$HOME/go/bin
+export PATH=$GOBIN:$PATH
+```
 1. Create your project by `go mod init` and go to root dir
 2. Install gorock by using:
 ```sh
