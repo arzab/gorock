@@ -1,14 +1,19 @@
 package services
 
 // Import start
+import "github.com/arzab/gorock/internal/services/asd"
 import "github.com/arzab/gorock/internal/services/fas"
 // Import end
 
 func Init(configs Configs) error {
 	// Init start
 	
+	// Asd
+	varAsd = asd.NewService(configs.Asd)
+	
 	// Fas
 	varFas = fas.NewService(configs.Fas)
+	
 	// Init end
 	return nil
 }
