@@ -190,10 +190,6 @@ func action(ctx context.Context, cmd *cli.Command) error {
 			)
 		}
 
-		//if data, err := os.ReadFile(path); err == nil {
-		//
-		//}
-
 		// Собираем данные прошлых сервисов
 		data, err := os.ReadFile(path)
 		if err == nil {
