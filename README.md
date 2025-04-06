@@ -39,11 +39,11 @@ export PATH=$GOBIN:$PATH
 ```sh
 go install github.com/arzab/gorock/cmd/gorock@latest
 ```
-3. Try to create you own `repository` service by using
+3. Try to create you own `repository` fiberEndpoint by using
 ```sh
-gorock service repository
+gorock fiberEndpoint repository
 ```
-4. Now you can use your service in you project
+4. Now you can use your fiberEndpoint in you project
 ```go
 package main
 
