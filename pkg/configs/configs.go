@@ -11,25 +11,25 @@ import (
 	"strings"
 )
 
-func Init(configsPath string, configs interface{}) error {
-	if reflect.TypeOf(configs).Kind() != reflect.Ptr {
-		return fmt.Errorf("configs object must be ptr type")
-	}
+const tagName = "config"
+
+func Init[Configs any](configsPath string) (*Configs, error) {
+	configs := new(Configs)
 
 	ext := filepath.Ext(configsPath)
 
 	if ext != ".json" {
-		return fmt.Errorf("configs file must have .json extension")
+		return nil, fmt.Errorf("configs file must have .json extension")
 	}
 
 	data, err := os.ReadFile(configsPath)
 	if err != nil {
-		return fmt.Errorf("read data err: %v", err)
+		return nil, fmt.Errorf("read data err: %v", err)
 	}
 
 	err = unmarshall(data, configs, ext)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshall: %v", err)
+		return nil, fmt.Errorf("failed to unmarshall: %v", err)
 	}
 
 	emptyProperties := getEmptyProperties(configs, "Config")
@@ -37,10 +37,10 @@ func Init(configsPath string, configs interface{}) error {
 		for _, property := range emptyProperties {
 			fmt.Printf("empty property: %s\n", property)
 		}
-		return fmt.Errorf("config struct have empty properties")
+		return nil, fmt.Errorf("config struct have empty properties")
 	}
 
-	return nil
+	return nil, nil
 }
 
 func unmarshall(data []byte, obj interface{}, ext string) error {
@@ -107,11 +107,11 @@ func getEmptyProperties(object interface{}, structName string) []string {
 		fieldName := value.Type().Field(i).Name
 		tag := value.Type().Field(i).Tag
 
-		if key := tag.Get("config"); key == "ignore" {
+		if key := tag.Get(tagName); key == "ignore" {
 			continue
 		}
-		if key := tag.Get("config"); key == "omit_empty" {
-			if field.IsNil() {
+		if key := tag.Get(tagName); key == "omitempty" {
+			if field.IsNil() || field.IsZero() {
 				continue
 			}
 		}

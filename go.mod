@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/urfave/cli/v3 v3.0.0-beta1
-	golang.org/x/text v0.22.0
+	golang.org/x/text v0.23.0
 )
 
 require (
@@ -31,6 +31,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/spf13/afero v1.14.0 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/swaggo/files/v2 v2.0.2 // indirect
 	github.com/swaggo/swag v1.16.4 // indirect
