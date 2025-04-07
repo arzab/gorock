@@ -20,7 +20,7 @@ func (f fiberEndpoint) GetHandlers() []fiber.Handler {
 	return f.Handlers
 }
 
-func FiberEndpoint(method, path string, handlers []fiber.Handler) Service[fiber.Handler] {
+func BuildFiberEndpoint(method, path string, handlers []fiber.Handler) FiberEndpoint {
 	return &fiberEndpoint{
 		Method:   method,
 		Path:     path,

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/arzab/gorock/internal/delivery/commands"
+	"github.com/arzab/gorock/internal/commands"
 	"github.com/urfave/cli/v3"
 	"os"
 )
