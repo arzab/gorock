@@ -41,7 +41,7 @@ go install github.com/arzab/gorock/cmd/gorock@latest
 ```
 3. Try to create you own `repository` service by using
 ```sh
-gorock service repository
+gorock internal service repository
 ```
 4. Now you can use your `service` in you project in any place (singleton template)
 ```go
