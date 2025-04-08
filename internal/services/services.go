@@ -1,22 +1,15 @@
 package services
 
 import (
-	"github.com/arzab/gorock/internal/services/asd"
-	"github.com/arzab/gorock/internal/services/asfaf"
-	"github.com/arzab/gorock/internal/services/asfasfd"
 	_ "regexp"
+	"github.com/arzab/gorock/internal/services/hello"
 	//Imports
 )
 
 var (
-	varAsd     asd.Service
-	varAsfasfd asfasfd.Service
-	varAsfaf   asfaf.Service
+	varHello hello.Service
 	// Var
 )
 
-func Asd() asd.Service         { return varAsd }
-func Asfasfd() asfasfd.Service { return varAsfasfd }
-func Asfaf() asfaf.Service     { return varAsfaf }
-
-//Functions
+func Hello() hello.Service { return varHello }
+	//Functions

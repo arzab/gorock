@@ -2,9 +2,7 @@ package services
 
 import (
 	"github.com/arzab/gorock/pkg/configs"
-	"github.com/arzab/gorock/internal/services/asd"
-	"github.com/arzab/gorock/internal/services/asfasfd"
-	"github.com/arzab/gorock/internal/services/asfaf"
+	"github.com/arzab/gorock/internal/services/hello"
 	//Imports
 )
 
@@ -15,9 +13,7 @@ func Init(path string) error {
 	}
 	cfg = cfg
 
-	varAsd = asd.NewService(cfg.Asd)
-	varAsfasfd = asfasfd.NewService(cfg.Asfasfd)
-	varAsfaf = asfaf.NewService(cfg.Asfaf)
+	varHello = hello.NewService(cfg.Hello)
 	//Init
 
 	return nil

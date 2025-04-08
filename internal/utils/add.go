@@ -8,6 +8,8 @@ import (
 	"regexp"
 )
 
+var TemplateDirPath = ""
+
 var regexImport = regexp.MustCompile(`import \((\n|[^)])+`)
 
 type Operation int

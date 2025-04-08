@@ -27,7 +27,7 @@ func action(ctx context.Context, cmd *cli.Command) error {
 		}
 	}
 
-	exampleDirPath := fmt.Sprintf("template/%s", servicesDirPath)
+	exampleDirPath := fmt.Sprintf("%s/%s", utils.TemplateDirPath, servicesDirPath)
 	dirEntry, err := afero.ReadDir(fs, exampleDirPath)
 	if err != nil {
 		return fmt.Errorf("could not read example directory %s: %s", exampleDirPath, err)

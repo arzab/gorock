@@ -2,6 +2,7 @@ package endpoints
 
 import (
 	"github.com/arzab/gorock/pkg/http/endpoints"
+	"github.com/arzab/gorock/delivery/endpoints/hello"
 	"github.com/arzab/gorock/delivery/endpoints/ga"
 	//Imports
 )
@@ -9,6 +10,7 @@ import (
 func HttpEndpoints() []endpoints.FiberEndpoint {
 	result := make([]endpoints.FiberEndpoint, 0)
 
+	result = append(result, hello.Endpoint())
 	result = append(result, ga.Endpoint())
 	//Endpoints
 
