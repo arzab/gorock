@@ -10,7 +10,6 @@ func handlers() []fiber.Handler {
 		params.DefaultHandler[Params](),
 		InitResponse(),
 		// Handlers
-		// Handlers
 		returnResponse(),
 	}
 }

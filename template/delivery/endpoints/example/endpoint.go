@@ -14,11 +14,11 @@ import (
 // @Param 		body body  Params true "comment"
 // @Success 200 {integer} int "Кол-во пользователей"
 // @Failure default {object} responses.ErrorResponse
-// @Router {path} [{method}]
+// @Router /{path} [{method}]
 func Endpoint() endpoints.FiberEndpoint {
 	return endpoints.BuildFiberEndpoint(
 		"{method}",
-		"{path}",
+		"/{path}",
 		handlers(),
 	)
 }

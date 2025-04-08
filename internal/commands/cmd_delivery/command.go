@@ -11,8 +11,8 @@ var endpointMethod string
 var Command = &cli.Command{
 	Name:      "delivery",
 	Usage:     "commands to manage delivery directory and entities like 'endpoints', 'processor', etc",
-	UsageText: `service [options] {command}`,
-	ArgsUsage: `service [options] {command}`,
+	UsageText: `delivery [options] {command}`,
+	ArgsUsage: `delivery [options] {command}`,
 	Commands: []*cli.Command{
 		cmd_endpoint.Command,
 	},
