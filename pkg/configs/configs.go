@@ -40,7 +40,7 @@ func Init[Configs any](configsPath string) (*Configs, error) {
 		return nil, fmt.Errorf("config struct have empty properties")
 	}
 
-	return nil, nil
+	return configs, nil
 }
 
 func unmarshall(data []byte, obj interface{}, ext string) error {
