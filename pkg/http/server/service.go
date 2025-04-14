@@ -18,7 +18,7 @@ type service struct {
 	app     *fiber.App
 }
 
-func (s service) Init() error {
+func (s *service) Init() error {
 	if s.configs.AdminEndpointsPath == "" {
 		s.configs.AdminEndpointsPath = "/admin"
 	} else {
@@ -43,13 +43,13 @@ func (s service) Init() error {
 	return nil
 }
 
-func (s service) Exec(httpEndpoints []endpoints.FiberEndpoint) error {
+func (s *service) Exec(httpEndpoints []endpoints.FiberEndpoint) error {
 	s.setupHttpEndpoints(s.app, httpEndpoints)
 
 	return s.app.Listen(fmt.Sprintf(":%s", s.configs.Port))
 }
 
-func (s service) Shutdown(shutdownFunc func() []error) []error {
+func (s *service) Shutdown(shutdownFunc func() []error) []error {
 	errors := make([]error, 0)
 
 	err := s.app.ShutdownWithTimeout(time.Duration(time.Second * 30))
@@ -62,14 +62,7 @@ func (s service) Shutdown(shutdownFunc func() []error) []error {
 	return errors
 }
 
-func NewService(configs Configs) Service {
-	return &service{
-		configs: configs,
-		handler: handler.NewService(configs.Handler),
-	}
-}
-
-func (s service) setupHttpEndpoints(app fiber.Router, endpoints []endpoints.FiberEndpoint) {
+func (s *service) setupHttpEndpoints(app fiber.Router, endpoints []endpoints.FiberEndpoint) {
 	// Setting up swagger configs
 	if s.configs.Swagger != nil {
 		app.Get(s.configs.Swagger.Path, swagger.HandlerDefault)
@@ -126,6 +119,13 @@ func (s service) setupHttpEndpoints(app fiber.Router, endpoints []endpoints.Fibe
 		}
 	}
 	return
+}
+
+func NewService(configs Configs) Service {
+	return &service{
+		configs: configs,
+		handler: handler.NewService(configs.Handler),
+	}
 }
 
 func setupEndpoint(router fiber.Router, endpoint endpoints.Service[fiber.Handler]) {
