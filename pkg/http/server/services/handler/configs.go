@@ -6,7 +6,6 @@ import (
 )
 
 type Configs struct {
-	EndpointsPath                  string          `json:"endpoints_path"`
 	IgnoreLogError                 bool            `json:"ignore_log_error" config:"ignore"`
 	MaskInternalServerErrorMessage string          `json:"mask_internal_server_error_message" config:"ignore"`
 	MonitoringConfigs              *monitor.Config `json:"monitoring_configs" config:"ignore"`
