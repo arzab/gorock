@@ -15,8 +15,8 @@ type SwaggerConfigs struct {
 }
 
 type Configs struct {
-	App                 fiber.Config    `json:"app"`
-	Swagger             SwaggerConfigs  `json:"swagger"`
+	App                 fiber.Config    `json:"app" config:"ignore"`
+	Swagger             *SwaggerConfigs `json:"swagger" config:"omitempty"`
 	Port                string          `json:"port,omitempty"`
 	Handler             handler.Configs `json:"handler,omitempty"`
 	AdminEndpointsPath  string          `json:"admin_endpoints_path" config:"ignore"`

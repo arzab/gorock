@@ -12,7 +12,7 @@
 [//]: # ([![Sponsors on Open Collective]&#40;https://opencollective.com/swag/sponsors/badge.svg&#41;]&#40;#sponsors&#41; [![FOSSA Status]&#40;https://app.fossa.io/api/projects/git%2Bgithub.com%2Fswaggo%2Fswag.svg?type=shield&#41;]&#40;https://app.fossa.io/projects/git%2Bgithub.com%2Fswaggo%2Fswag?ref=badge_shield&#41;)
 [//]: # ([![Release]&#40;https://img.shields.io/github/release/swaggo/swag.svg?style=flat-square&#41;]&#40;https://github.com/swaggo/swag/releases&#41;)
 <br>
-<br>
+<br>n
 <br>
 <br>
 <br>

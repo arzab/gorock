@@ -43,7 +43,7 @@ func (s service) Init() error {
 	return nil
 }
 
-func (s service) Exec(httpEndpoints []endpoints.Service[fiber.Handler]) error {
+func (s service) Exec(httpEndpoints []endpoints.FiberEndpoint) error {
 	s.setupHttpEndpoints(s.app, httpEndpoints)
 
 	return s.app.Listen(fmt.Sprintf(":%s", s.configs.Port))
@@ -69,14 +69,16 @@ func NewService(configs Configs) Service {
 	}
 }
 
-func (s service) setupHttpEndpoints(app fiber.Router, endpoints []endpoints.Service[fiber.Handler]) {
+func (s service) setupHttpEndpoints(app fiber.Router, endpoints []endpoints.FiberEndpoint) {
 	// Setting up swagger configs
-	app.Get(s.configs.Swagger.Path, swagger.HandlerDefault)
-	swaggerConfigs := s.configs.Swagger.Configs
-	swaggerConfigs.OAuth = s.configs.Swagger.OAuth
-	swaggerConfigs.Filter = s.configs.Swagger.Filter
-	swaggerConfigs.SyntaxHighlight = s.configs.Swagger.SyntaxHighlight
-	app.Get(fmt.Sprintf("%s/*", s.configs.Swagger.Path), swagger.New(swaggerConfigs))
+	if s.configs.Swagger != nil {
+		app.Get(s.configs.Swagger.Path, swagger.HandlerDefault)
+		swaggerConfigs := s.configs.Swagger.Configs
+		swaggerConfigs.OAuth = s.configs.Swagger.OAuth
+		swaggerConfigs.Filter = s.configs.Swagger.Filter
+		swaggerConfigs.SyntaxHighlight = s.configs.Swagger.SyntaxHighlight
+		app.Get(fmt.Sprintf("%s/*", s.configs.Swagger.Path), swagger.New(swaggerConfigs))
+	}
 
 	// Settings up admin endpoints
 	admin := app.Group(s.configs.AdminEndpointsPath)
@@ -98,27 +100,22 @@ func (s service) setupHttpEndpoints(app fiber.Router, endpoints []endpoints.Serv
 	//}
 
 	// Set http endpoints
-	if len(s.configs.AdminEndpointsPath) > 0 {
-		// Настраваем http эндпоинты
-		httpEndpointsRouter := app.Group(s.configs.EndpointsPathPrefix)
-		if s.configs.UseTraceId {
-			httpEndpointsRouter.Use(s.handler.GenerateTraceIdMiddleware())
-		}
-		if s.configs.LogRequestReceive {
-			httpEndpointsRouter.Use(s.handler.RequestReceiverMiddleware())
-		}
-		for _, endpoint := range endpoints {
-			setupEndpoint(httpEndpointsRouter, endpoint)
-		}
+	var httpEndpointsRouter fiber.Router
+
+	if len(s.configs.EndpointsPathPrefix) > 0 {
+		httpEndpointsRouter = app.Group(s.configs.EndpointsPathPrefix)
+	} else {
+		httpEndpointsRouter = app.Group("/")
 	}
-	//} else {
-	//	if s.configs.LogRequestReceive == nil || *s.configs.LogRequestReceive == true {
-	//		app.Use(handlerService.RequestReceiverMiddleware())
-	//	}
-	//	for _, endpoint := range httpEndpoints {
-	//		SetupEndpoint(app, endpoint)
-	//	}
-	//}
+	if s.configs.UseTraceId {
+		httpEndpointsRouter.Use(s.handler.GenerateTraceIdMiddleware())
+	}
+	if s.configs.LogRequestReceive {
+		httpEndpointsRouter.Use(s.handler.RequestReceiverMiddleware())
+	}
+	for _, endpoint := range endpoints {
+		setupEndpoint(httpEndpointsRouter, endpoint)
+	}
 
 	// Print registered endpoints
 	fmt.Println("\n\nRoutes:")

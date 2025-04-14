@@ -1,16 +1,11 @@
 package services
 
 import (
-	"github.com/arzab/gorock/pkg/configs"
+	_ "regexp"
 	//Imports
 )
 
-func Init(path string) error {
-	cfg, err := configs.Init[Configs](path)
-	if err != nil {
-		return err
-	}
-	cfg = cfg
+func Init(cfg Configs) error {
 
 	//Init
 
