@@ -1,56 +1,53 @@
+<div align="center">
+
 # GOROCK
 
-🌍 *[English](README.md) ∙ [Russian](README_ru.md)*<br>
-<img align="right" width="180px" src="media/icon.png">
+**Прагматичная Go-архитектура**
 
-[//]: # ([![Build Status]&#40;https://github.com/swaggo/swag/actions/workflows/ci.yml/badge.svg?branch=master&#41;]&#40;https://github.com/features/actions&#41;)
-[//]: # ([![Coverage Status]&#40;https://img.shields.io/codecov/c/github/swaggo/swag/master.svg&#41;]&#40;https://codecov.io/gh/swaggo/swag&#41;)
-[//]: # ([![Go Report Card]&#40;https://goreportcard.com/badge/github.com/swaggo/swag&#41;]&#40;https://goreportcard.com/report/github.com/swaggo/swag&#41;)
-[//]: # ([![codebeat badge]&#40;https://codebeat.co/badges/71e2f5e5-9e6b-405d-baf9-7cc8b5037330&#41;]&#40;https://codebeat.co/projects/github-com-swaggo-swag-master&#41;)
-[//]: # ([![Go Doc]&#40;https://godoc.org/github.com/swaggo/swagg?status.svg&#41;]&#40;https://godoc.org/github.com/swaggo/swag&#41;)
-[//]: # ([![Backers on Open Collective]&#40;https://opencollective.com/swag/backers/badge.svg&#41;]&#40;#backers&#41;)
-[//]: # ([![Sponsors on Open Collective]&#40;https://opencollective.com/swag/sponsors/badge.svg&#41;]&#40;#sponsors&#41; [![FOSSA Status]&#40;https://app.fossa.io/api/projects/git%2Bgithub.com%2Fswaggo%2Fswag.svg?type=shield&#41;]&#40;https://app.fossa.io/projects/git%2Bgithub.com%2Fswaggo%2Fswag?ref=badge_shield&#41;)
-[//]: # ([![Release]&#40;https://img.shields.io/github/release/swaggo/swag.svg?style=flat-square&#41;]&#40;https://github.com/swaggo/swag/releases&#41;)
-<br>
-<br>n
-<br>
-<br>
-<br>
-<br>
-Gorock is a framework for automating routine tasks, making Go developers' work easier. 🚀
+Go минималистичен. Бэкенд шаблонен. GOROCK соединяет эти две идеи — даёт стандарт там где он нужен, и оставляет свободу там где она важна.
 
+[![Docs](https://img.shields.io/badge/docs-arzab.github.io/gorock-blue)](https://arzab.github.io/gorock/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+</div>
 
+---
 
+## Идея
 
-
-
-
-
-## Getting started
-
-0. Set your go variables
-```sh
-go env -w GOPATH=$HOME/go GOBIN=$HOME/go/bin
-export PATH=$GOBIN:$PATH
-```
-1. Create your project by `go mod init` and go to root dir
-2. Install gorock by using:
-```sh
-go install github.com/arzab/gorock/cmd/gorock@latest
-```
-3. Try to create you own `repository` service by using
-```sh
-gorock internal service repository
-```
-4. Now you can use your `service` in you project in any place (singleton template)
-```go
-package main
-
-import "{project-name}/internal/services"
-
-func main(){
-	srv := services.Repository()
-}
+Три слоя. Каждый знает своё место.
 
 ```
+project/
+├── cmd/        — Engine    — когда и как запустить
+├── internal/   — Realm     — что происходит внутри
+└── pkg/        — Toolkit   — инструменты без бизнес-логики
+```
+
+Открываешь любой GOROCK-проект — сразу знаешь где искать код.
+Работает для HTTP-сервера, consumer'а, worker'а, scheduler'а, CLI.
+
+---
+
+## Документация
+
+**[arzab.github.io/gorock](https://arzab.github.io/gorock/)**
+
+| Раздел | |
+|--------|-|
+| [Что такое GOROCK](https://arzab.github.io/gorock/architecture/) | Идея, три слоя, структура проекта |
+| [Концепты](https://arzab.github.io/gorock/architecture/concepts) | Пять принципов архитектуры |
+| [Engine](https://arzab.github.io/gorock/architecture/engine) | Запуск, lifecycle, Apps |
+| [Realm](https://arzab.github.io/gorock/architecture/realm) | Бизнес-логика, Delivery, Models |
+| [Toolkit](https://arzab.github.io/gorock/architecture/toolkit) | Services, Infra, Libs |
+| [Конфигурация](https://arzab.github.io/gorock/architecture/configs) | Конфиги как документация |
+
+---
+
+## Экосистема
+
+| Репозиторий | Описание |
+|-------------|----------|
+| [arzab/gorock](https://github.com/arzab/gorock) | Архитектурный стандарт и документация |
+| arzab/gorock-kit | Готовые реализации для GOROCK-проектов *(скоро)* |
+| arzab/gorock-cli | Генератор слоёв и сущностей *(скоро)* |
