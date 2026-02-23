@@ -102,4 +102,3 @@ project/
 
 - [Концепты GOROCK](/architecture/concepts) — пять идей, на которых держится архитектура
 - [Быстрый старт](/architecture/getting-started) — поставить CLI и создать первый сервис
-- [Обзор слоёв](/architecture/layers) — подробнее о слоях, зависимостях и антипаттернах
