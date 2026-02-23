@@ -9,6 +9,7 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: 'Архитектура', link: '/architecture/' },
+      { text: 'Примеры', link: '/examples/' },
       { text: 'gorock-kit', link: '/gorock-kit/' },
       { text: 'CLI', link: '/cli/' },
     ],
@@ -19,7 +20,6 @@ export default defineConfig({
           text: 'Введение',
           items: [
             { text: 'Что такое GOROCK', link: '/architecture/' },
-            { text: 'Быстрый старт', link: '/architecture/getting-started' },
           ]
         },
         {
@@ -51,6 +51,21 @@ export default defineConfig({
           text: 'Конфигурация',
           items: [
             { text: 'Configs', link: '/architecture/configs' },
+          ]
+        },
+        {
+          text: 'Итог',
+          items: [
+            { text: 'Итог', link: '/architecture/summary' },
+          ]
+        },
+      ],
+
+      '/examples/': [
+        {
+          text: 'Примеры',
+          items: [
+            { text: 'Все примеры', link: '/examples/' },
           ]
         },
       ],

@@ -60,45 +60,6 @@ pkg/
 
 ---
 
-## Структура проекта
-
-```
-project/
-├── cmd/
-│   ├── main/                   — точка входа, lifecycle
-│   └── apps/
-│       ├── main.go             — Init, Exec, WaitShutdown
-│       ├── http_server/        — HTTP-сервер
-│       └── pubsub_consumer/    — consumer
-│
-├── internal/
-│   ├── delivery/
-│   │   ├── endpoints/          — HTTP handlers
-│   │   ├── consumers/          — consumer handlers
-│   │   └── events/             — eventbus handlers
-│   ├── models/                 — сущности предметной области
-│   └── utils/                  — вспомогательные функции
-│
-├── pkg/
-│   ├── services/               — singleton-обёртки над внешними системами
-│   ├── infra/                  — логирование, трейсинг, eventbus, vars
-│   └── libs/                   — переиспользуемые строительные блоки
-│
-├── configs/
-│   ├── configs.json
-│   ├── dev.json
-│   └── prod.json
-│
-├── migrations/                 — допустимо
-├── scripts/                    — допустимо
-└── deployments/                — допустимо
-```
-
-Весь **код приложения** живёт внутри трёх слоёв: Engine (`cmd/`), Realm (`internal/`), Toolkit (`pkg/`). Остальные папки в корне — на усмотрение разработчика.
-
----
-
 ## Следующий шаг
 
-- [Быстрый старт](/architecture/getting-started) — поставить CLI и создать первый сервис
-- [Toolkit](/architecture/toolkit) — инструментарий: services, infra, libs
+- [Toolkit](/architecture/toolkit) — первый шаг: подготовить инструментарий
