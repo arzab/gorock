@@ -19,32 +19,32 @@ export default defineConfig({
           text: 'Введение',
           items: [
             { text: 'Что такое GOROCK', link: '/architecture/' },
-            { text: 'Концепты', link: '/architecture/concepts' },
-          ]
-        },
-        {
-          text: 'Engine',
-          items: [
-            { text: 'Cmd', link: '/architecture/engine' },
-            { text: 'Main', link: '/architecture/main' },
-            { text: 'Apps', link: '/architecture/apps' },
-          ]
-        },
-        {
-          text: 'Realm',
-          items: [
-            { text: 'Internal', link: '/architecture/realm' },
-            { text: 'Delivery', link: '/architecture/delivery' },
-            { text: 'Models', link: '/architecture/models' },
+            { text: 'Быстрый старт', link: '/architecture/getting-started' },
           ]
         },
         {
           text: 'Toolkit',
           items: [
-            { text: 'Pkg', link: '/architecture/toolkit' },
+            { text: 'Обзор', link: '/architecture/toolkit' },
             { text: 'Services', link: '/architecture/services' },
             { text: 'Infra', link: '/architecture/infra' },
             { text: 'Libs', link: '/architecture/libs' },
+          ]
+        },
+        {
+          text: 'Realm',
+          items: [
+            { text: 'Обзор', link: '/architecture/realm' },
+            { text: 'Models', link: '/architecture/models' },
+            { text: 'Delivery', link: '/architecture/delivery' },
+          ]
+        },
+        {
+          text: 'Engine',
+          items: [
+            { text: 'Обзор', link: '/architecture/engine' },
+            { text: 'Main', link: '/architecture/main' },
+            { text: 'Apps', link: '/architecture/apps' },
           ]
         },
         {

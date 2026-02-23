@@ -100,5 +100,5 @@ project/
 
 ## Следующий шаг
 
-- [Концепты GOROCK](/architecture/concepts) — пять идей, на которых держится архитектура
 - [Быстрый старт](/architecture/getting-started) — поставить CLI и создать первый сервис
+- [Toolkit](/architecture/toolkit) — инструментарий: services, infra, libs

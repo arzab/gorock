@@ -1,12 +1,10 @@
-# Конфигурация
+# Configs
 
 ---
 
 ## Концепт
 
 Configs — это документация которая всегда актуальна. Открыл один файл — увидел все слои, все зависимости, все технологии. Структура configs отражает структуру приложения. Неполный конфиг — приложение не запускается.
-
-→ [Концепты GOROCK](/architecture/concepts)
 
 ---
 
@@ -50,7 +48,7 @@ type Configs struct {
 
 Как правило не имеет конфигов. Delivery, models и utils не нуждаются в настройке при старте — их поведение определяется бизнес-логикой, а не конфигурационным файлом.
 
-### Tools — `pkg/`
+### Toolkit — `pkg/`
 
 Services и infra объявляют конфиги. Libs конфигов не имеют — они не singletons:
 
@@ -92,46 +90,6 @@ type Configs struct {
     Services services.Configs `json:"services"`
 }
 ```
-
-### Корневой Configs
-
-`cmd/main` собирает конфиги всех слоёв по архитектурным именам:
-
-```go
-// cmd/main/main.go
-type Configs struct {
-    Engine engine.Configs `json:"engine"`
-    Tools  tools.Configs  `json:"tools"`
-}
-```
-
-Итоговый JSON:
-
-```json
-{
-  "engine": {
-    "http_server": { "port": "$APP_PORT", "timeout": 30 },
-    "pubsub_consumer": { "subscription_id": "$PUBSUB_SUB", "project_id": "$GCP_PROJECT" }
-  },
-  "tools": {
-    "infra": {
-      "logs": { "level": "info" },
-      "vars": { "env": "$APP_ENV" }
-    },
-    "services": {
-      "repository": {
-        "host": "$DB_HOST",
-        "port": "5432",
-        "name": "$DB_NAME",
-        "user": "$DB_USER",
-        "password": "$DB_PASSWORD"
-      }
-    }
-  }
-}
-```
-
-
 
 ### infra/vars — глобальные переменные
 

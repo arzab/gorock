@@ -2,7 +2,7 @@
 
 **Engine** · `cmd/apps/`
 
-Слой который управляет всеми App в проекте. Содержит список всех App, их агрегированный Configs и глобальные функции `Init` и `Exec`.
+Здесь вы реализуете логику вашего приложения. App оборачивает технологию взаимодействия — HTTP-сервер, consumer, scheduler, CLI — и умеет принимать delivery-сущности из Realm и обрабатывать их результаты.
 
 ```
 cmd/apps/
@@ -46,7 +46,7 @@ type Interface interface {
 }
 ```
 
-`Init` — подготовка: соединения, регистрация обработчиков из Realm.
+`Init` — подготовка: регистрация delivery-сущностей из Realm.
 
 `Exec` — запуск. Для long-running блокирующий, для short-running завершается когда работа сделана.
 
@@ -55,6 +55,44 @@ type Interface interface {
 `Stop` — финальная очистка ресурсов.
 
 Оркестрацией занимается Main — запуск, ожидание сигнала ОС, вызов `Shutdown`/`Stop`. App не знает о других App.
+
+---
+
+## Обработка результатов Realm
+
+App знает язык своего протокола, Realm знает язык бизнеса. App переводит одно в другое.
+
+Если delivery вернул обычную `error` — это непредвиденная ошибка, возвращаем 500. Если delivery вернул типизированный `ResponseError` с кодом — возвращаем именно его:
+
+```go
+func (a *app) handleError(ctx *fiber.Ctx, err error) error {
+    var respErr *responses.ErrorResponse
+    if errors.As(err, &respErr) {
+        // Delivery явно сказал что вернуть — используем его код
+        return ctx.Status(respErr.Code).JSON(respErr)
+    }
+    // Непредвиденная ошибка — 500
+    return ctx.Status(500).JSON(responses.NewError(500, "internal error"))
+}
+```
+
+Delivery возвращает типизированную ошибку так:
+
+```go
+// internal/delivery/endpoints/create_user/handlers.go
+func createUser() fiber.Handler {
+    return func(ctx *fiber.Ctx) error {
+        params, _ := GetParams(ctx)
+        if params.Email == "" {
+            return responses.NewError(400, "email is required")
+        }
+        if err := services.Repository().Save(&models.User{Email: params.Email}); err != nil {
+            return responses.NewError(500, "failed to create user")
+        }
+        return ctx.Next()
+    }
+}
+```
 
 ---
 

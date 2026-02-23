@@ -33,13 +33,51 @@ Models — сущности предметной области. Они могу
 
 ---
 
+## Реализация контрактов Services
+
+Модели могут реализовывать интерфейсы (контракты) из `pkg/services`. Поведение сущности закладывается прямо в модель — сервис использует интерфейс и не знает о конкретном типе.
+
+Пример: сервис принимает `Saveable` с методом `SaveValidation`. Логика хэширования пароля живёт в `models.User` — не в сервисе:
+
+```go
+// pkg/services/repository/interface.go
+type Saveable interface {
+    GetId() string
+    SaveValidation() error
+}
+
+// internal/models/user.go
+type User struct {
+    ID           string
+    Name         string
+    Email        string
+    PasswordHash string
+    password     string
+}
+
+func (u *User) GetId() string { return u.ID }
+
+func (u *User) SaveValidation() error {
+    hash, err := bcrypt.GenerateFromPassword([]byte(u.password), bcrypt.DefaultCost)
+    if err != nil {
+        return err
+    }
+    u.PasswordHash = string(hash)
+    return nil
+}
+```
+
+`User` реализует `Saveable` неявно — Go проверяет это при передаче. Сервис вызывает `SaveValidation()` не зная о `User`.
+
+---
+
 ## Кто использует models
 
 В первую очередь — `internal/delivery`. Именно там сосредоточена бизнес-логика которая работает с сущностями.
 
 Остальные слои в идеале не зависят от models напрямую:
 
-- `pkg/services` описывают собственные типы внутри пакета — это обеспечивает переносимость и исключает import cycles. Если переносимость не нужна, сервис может использовать models напрямую — на усмотрение разработчика.
+- `pkg/services` описывают собственные интерфейсы внутри пакета — это обеспечивает переносимость. Модели реализуют эти интерфейсы неявно.
 - `cmd/apps` работает с delivery-сущностями, не с models напрямую.
 
 ---
