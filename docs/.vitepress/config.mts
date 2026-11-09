@@ -75,6 +75,7 @@ export default defineConfig({
             { text: 'rockconfig — конфиг', link: '/gorock-kit/rockconfig' },
             { text: 'rockservices — сервисы', link: '/gorock-kit/rockservices' },
             { text: 'rockhandlers — обработка запросов', link: '/gorock-kit/rockhandlers' },
+            { text: 'Как написать транспорт', link: '/gorock-kit/rockhandlers-transport' },
           ]
         },
       ],
