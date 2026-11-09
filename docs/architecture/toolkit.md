@@ -12,7 +12,7 @@
 
 Toolkit не импортирует `internal/`. Он не знает, что такое `User` или `Task`. Он просто умеет сохранять, находить, публиковать, кэшировать. Написали один раз — переносите в любой проект без изменений.
 
-Большая часть типовых обёрток уже есть в [gorock-kit](/gorock-kit/): PostgreSQL ([rockbun](/gorock-kit/rockbun)), Redis ([rockredis](/gorock-kit/rockredis)), логгер ([rocklog](/gorock-kit/rocklog)). Ваш Toolkit тогда — тонкий слой поверх них, который описывает функционал именно вашего проекта.
+Сервисы хранит и поднимает [rockservices](/gorock-kit/rockservices) из ядра, а большая часть типовых обёрток уже есть в [каталоге](/catalog/): PostgreSQL ([rockbun](/catalog/rockbun)), Redis ([rockredis](/catalog/rockredis)), логгер ([rocklog](/catalog/rocklog)). Ваш Toolkit тогда — тонкий слой поверх них, который описывает функционал именно вашего проекта.
 
 ---
 

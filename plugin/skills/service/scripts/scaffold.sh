@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Create a new GOROCK + gorock-kit service from templates/skeleton.
+# Create a new GOROCK service (gorock-kit core + gorock-catalog) from templates/skeleton.
 #
 # Usage: scaffold.sh <module-path> [target-dir]
 #   scaffold.sh github.com/acme/orders ./orders
 #
 # Copies the skeleton, sets the module path, adds AGENTS.md, fetches the kit
-# modules and builds. Refuses to write into a non-empty directory.
+# and catalog modules and builds. Refuses to write into a non-empty directory.
 set -euo pipefail
 
 if [ "$#" -lt 1 ]; then
@@ -45,9 +45,10 @@ export GOWORK=off
 go get \
   github.com/arzab/gorock-kit/rockengine@latest \
   github.com/arzab/gorock-kit/rockconfig@latest \
-  github.com/arzab/gorock-kit/rocklog@latest \
-  github.com/arzab/gorock-kit/rockfiber@latest \
-  github.com/gofiber/fiber/v2@latest
+  github.com/arzab/gorock-kit/rockservices@latest \
+  github.com/arzab/gorock-kit/rockhandlers@latest \
+  github.com/arzab/gorock-catalog/rockhttp@latest \
+  github.com/arzab/gorock-catalog/rocklog@latest
 go mod tidy
 gofmt -l . | (! grep .) || { echo "gofmt reported unformatted files" >&2; exit 1; }
 go vet ./...

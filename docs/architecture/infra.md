@@ -52,7 +52,7 @@ Infra не регистрируется в движке: у логгера не�
 
 ## logs
 
-Сам логгер уже есть — [rocklog](/gorock-kit/rocklog). Он сам по себе интерфейс (`rocklog.Logger`), поэтому отдельная обёртка над ним не нужна. Задача `pkg/infra/logs` — перевести настройки из файла конфига в `rocklog.Init`:
+Сам логгер уже есть — [rocklog](/catalog/rocklog). Он сам по себе интерфейс (`rocklog.Logger`), поэтому отдельная обёртка над ним не нужна. Задача `pkg/infra/logs` — перевести настройки из файла конфига в `rocklog.Init`:
 
 ```go
 package logs
@@ -60,7 +60,7 @@ package logs
 import (
     "fmt"
 
-    "github.com/arzab/gorock-kit/rocklog"
+    "github.com/arzab/gorock-catalog/rocklog"
 )
 
 // Configs — то, что можно задать в файле.
@@ -141,7 +141,7 @@ Distributed tracing — трассировка запроса через все 
 
 ## События внутри процесса
 
-Раньше здесь жил `eventbus`. Теперь это готовая шина [rockbus](/gorock-kit/rockbus) — и она не infra, а **App**: у неё есть собственная работа (воркеры, очереди) и жизненный цикл. Регистрируется в `cmd/apps`, обработчики описываются в `internal/delivery/events`, публиковать можно из любого delivery:
+Раньше здесь жил `eventbus`. Теперь это шина [rockbus](/catalog/rockbus) из каталога — и она не infra, а **App**: у неё есть собственная работа (воркеры, очереди) и жизненный цикл. Регистрируется в `cmd/apps`, обработчики описываются в `internal/delivery/events`, публиковать можно из любого delivery:
 
 ```go
 rockbus.PublishAsync(ctx, rockbus.Event{Topic: events.TaskCreated, Payload: *task})

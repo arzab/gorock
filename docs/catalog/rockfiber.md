@@ -1,18 +1,22 @@
 # rockfiber
 
-<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockfiber/README_RU.md — правьте README в gorock-kit. -->
+<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockfiber/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · Engine · Apps
-Готовый HTTP App: регистрируется в `cmd/apps`, принимает endpoints из `internal/delivery/endpoints`. В delivery используются его хелперы: `GET/POST`, `DefaultHandler`, `GetFromContext`, `NewError`. → [Apps](/architecture/apps), [Delivery](/architecture/delivery)
+HTTP App на Fiber v2 со своей моделью endpoints (`fiber.Handler`, `DefaultHandler`, `NewError`). → [Apps](/architecture/apps)
+:::
+
+::: warning Перенесён из gorock-kit v0.2.0 как есть
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rockfiber@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockfiber`. Модуль ещё не переведён на новое ядро: для новых сервисов берите [rockhttp](./rockhttp) на [rockhandlers](/gorock-kit/rockhandlers).
 :::
 
 ```sh
-go get github.com/arzab/gorock-kit/rockfiber@latest
+go get github.com/arzab/gorock-catalog/rockfiber@latest
 ```
 
-[Исходный код и README на GitHub](https://github.com/arzab/gorock-kit/tree/main/rockfiber)
+[Исходный код и README на GitHub](https://github.com/arzab/gorock-catalog/tree/main/rockfiber)
 
-Обёртка над fiber для HTTP-сервера с интеграцией в [rockengine](./rockengine): структурированная маршрутизация, парсинг запросов, обработка ошибок и production-middlewares.
+Обёртка над fiber для HTTP-сервера с интеграцией в [rockengine](/gorock-kit/rockengine): структурированная маршрутизация, парсинг запросов, обработка ошибок и production-middlewares.
 
 ## Обзор
 

@@ -1,7 +1,7 @@
 # AGENTS.md
 
-This is a Go service built with the **GOROCK** architecture and **gorock-kit** (v0.2.x, Go 1.26+).
-Docs: https://arzab.github.io/gorock/ · Kit: https://github.com/arzab/gorock-kit
+This is a Go service built with the **GOROCK** architecture: **gorock-kit** core (v0.3.x) + **gorock-catalog**, Go 1.26+.
+Docs: https://arzab.github.io/gorock/ · Core: https://github.com/arzab/gorock-kit · Catalog: https://github.com/arzab/gorock-catalog
 
 ## Commands
 
@@ -16,12 +16,12 @@ go run ./cmd/main ./configs/prod.yaml   # another config file
 ## Where code goes
 
 ```
-cmd/main/main.go          Configs (aggregates all layers) + Exec(): load config → infra.Init → engine → Run
+cmd/main/main.go          Configs + Exec(): config → infra.Init → services (rockservices) → engine.Run (apps) → services stop
 cmd/apps/apps.go          Configs of all apps + Register(engine, cfg): creates and registers every App
-internal/delivery/        business logic: endpoints/, events/, jobs/ — self-describing entities
+internal/delivery/        business logic: routes (rockhandlers chains), steps/, middleware/, endpoints/endpoints.go (HTTP mounting), events/, jobs/
 internal/models/          domain entities
 internal/utils/           stateless project helpers
-pkg/services/             wrappers over external systems (DB, cache, APIs); singletons with getters
+pkg/services/             wrappers over external systems (DB, cache, APIs); added to the rockservices catalog
 pkg/infra/                project primitives: logs (rocklog setup), vars
 pkg/libs/                 your own stateless reusable code
 configs/configs.yaml      one file, mirrors cmd/main.Configs
@@ -31,22 +31,24 @@ Ask in this order: wraps an external technology → `pkg/services`. Project tool
 
 Dependency direction: `cmd` → `internal` → `pkg`. `pkg/` never imports `internal/`. Delivery never imports `cmd/apps`.
 
-## Contracts (gorock-kit)
+## Contracts
 
-- **App** (`rockengine.App`): `Init(ctx) error`, `Exec(ctx) error`, `Stop() []error`. No `Shutdown`: "finish current work" = cancellation of the ctx given to `Exec`. Anything `Exec` returns after ctx is cancelled is a clean stop. `Stop` must not wait for `Exec` (it can be called when `Exec` never ran).
-- **Resource** (`rockengine.Resource`): `Init(ctx) error`, `Stop() error`. Every service in `pkg/services` is one; register with `e.MustRegisterResource(name, svc)` in `services.Register`. Resources init before all apps and stop after all apps.
-- Ready-made apps: HTTP `rockfiber.New(cfg, endpoints...)`, events `rockbus.NewApp(cfg, onError, subs...)`, schedule `rockcron.NewApp(cfg, onError, jobs...)`, Telegram `rocktelebot.NewApp(cfg, middlewares, handlers...)`. Ready-made resources: `rockbun.NewService` (PostgreSQL/bun), `rockredis.NewService`.
-- Write a custom App only when no ready-made one fits.
+- **App** (`rockengine.App`): `Init(ctx) error`, `Exec(ctx) error`, `Stop() []error`. No `Shutdown`: "finish current work" = cancellation of the ctx given to `Exec`. Anything `Exec` returns after ctx is cancelled is a clean stop. `Stop` must not wait for `Exec`. The engine manages apps only.
+- **Service** (`rockservices.Service`): `Name() string`, `Init(ctx) error`, `Stop() error`. Added in `services.Register` with `rockservices.Add(c, NewService, cfg)` (add order = Init order); `cmd/main` calls `rockservices.Init` before the engine and `rockservices.Stop` after it. Get one anywhere with the package getter: `repository.Get()`.
+- **Route** (`rockhandlers`): `rockhandlers.Chain("orders.create", steps...)`, steps `func(c *rockhandlers.Ctx[*Params, *Result]) error` calling `c.Next()`. Transport-independent: HTTP mounts it with `rockhttp.Endpoint{Method, Path, Handler, Status}` in `internal/delivery/endpoints/endpoints.go`.
+- Catalog apps: HTTP `rockhttp.New(cfg, endpoints...).Use(mws...)`; events `rockbus.NewApp`, schedule `rockcron.NewApp`, Telegram `rocktelebot.NewApp` (not on rockhandlers yet). Catalog services `rockbun`, `rockredis` have no `Name()` — use them as child services inside your own.
+- Write a custom App only when no catalog app fits; it only decodes into Params (`route.Serve(ctx, fill)`) and maps the result / `rockhandlers.KindOf(err)` to its protocol.
 
 ## Rules
 
-- **Services:** interface is `Service`, implementation `service`, constructor `func NewService(cfg Configs) Service`. `NewService` only stores config and creates child services — no connections. Services expose functionality (`Insert(ctx, model any)`), not business methods (`SaveUser`), and don't import `internal/models`. Return package errors (`ErrNotFound`) that delivery checks with `errors.Is`.
-- **Delivery (HTTP):** one endpoint = one folder with `endpoint.go` (`rockfiber.POST("/path", handlers()...)`), `handlers.go` (chain, each step calls `c.Next()`), `params.go` (struct + `Validate(*fiber.Ctx) error` + `rockfiber.DefaultHandler[Params]()`), `response.go`. Add it to `endpoints.All()`. The `/api/v1` prefix comes from config, not from the endpoint.
-- **Errors are business decisions:** `rockfiber.NewError(code, msg)` for a status the client must see; a plain `fmt.Errorf("...: %w", err)` becomes 500 with a masked message. Pass `c.UserContext()` (deadline + trace id) to services.
-- **Logging:** `rocklog.Info/Warn/Error(msg, rocklog.Str(k, v), rocklog.Err(err))`; request-scoped: `ctx = rocklog.WithContext(ctx, fields...)`, `rocklog.FromContext(ctx)`. Never `rocklog.Fatal` or `log.Fatal` outside `main()` — return errors; the engine decides about restarts.
-- **Events:** topics and handlers in `internal/delivery/events` (`rockbus.On(topic, handler)`), publish with `rockbus.PublishAsync(ctx, rockbus.Event{Topic: t, Payload: v})`, read with `rockbus.Payload[T](ctx)`. Subscribe before the engine starts.
-- **Jobs:** `rockcron.Every(name, interval, handlers...)` / `rockcron.Cron(name, "0 3 * * *", handlers...)` in `internal/delivery/jobs`; handlers respect `ctx`.
+- **Services:** interface `Service` (embeds `rockservices.Service`), implementation `service`, `const Name`, getter `func Get() Service`, constructor `func NewService(cfg Configs) Service` — stores config and creates child services, no connections. Services expose functionality (`Insert(ctx, model any)`), not business methods, and don't import `internal/models`. Return package errors (`ErrNotFound`) that delivery checks with `errors.Is`.
+- **Routes:** one route = one folder (`route.go`, optionally `params.go`, `result.go`, `steps.go`). `Params` carries tags for the transport (`path`, `query`, `header`, `form`, `json`) and `Validate() error` (runs first). `Result` is pre-allocated — steps fill it. Pass `c` (a context.Context) to services. Data between steps: `rockhandlers.NewLocal[T](name)`.
+- **Errors are business decisions:** `rockhandlers.Invalid/Unauthorized/Forbidden/NotFound/Conflict/Unavailable(msg)` (`.WithFields(map)` for validation); a plain `fmt.Errorf("...: %w", err)` becomes Internal with a hidden message. Never HTTP status codes in routes.
+- **Reusable steps** (auth, tenant…): generic with an interface constraint (`func Bearer[P TokenParams, R any](c *rockhandlers.Ctx[P, R]) error`); models satisfy it by embedding. No type assertions on Params. Groups are plain generic functions using `rockhandlers.Prepend`.
+- **Middlewares** (`func(c rockhandlers.Context) error`) only for logic that doesn't read request data: logging, metrics, timeouts. App-wide via `app.Use(...)`, per route via `route.With(...)`.
+- **Logging:** `rocklog.Info/Warn/Error(msg, rocklog.Str(k, v), rocklog.Err(err))`; request-scoped: `rocklog.WithContext(ctx, fields...)`, `rocklog.FromContext(ctx)`. Never `rocklog.Fatal` or `log.Fatal` outside `main()`.
 - **Registration order:** apps stop in reverse order — register the HTTP server last.
+- **Tests:** `rockhandlers.Run[*Result](ctx, Route, &Params{...})` runs a whole route without HTTP; fake services with `rockservices.New()` + `rockservices.SetDefault`.
 
 ## Config (rockconfig)
 
@@ -55,12 +57,12 @@ Dependency direction: `cmd` → `internal` → `pkg`. `pkg/` never imports `inte
 - `config:"-"` for values set in code (funcs, third-party structs). `config:",env=VAR"` binds a field to an env var.
 - Env references in the file: `${VAR}` (error if unset) or `${VAR:-default}`. A bare `$` is literal. Secrets only via env.
 - Unknown keys are errors (typos are caught). Durations are strings with units: `5s`, `1m30s` — never bare numbers.
-- A field with an in-code default must be `omitempty`, otherwise users are forced to set it.
 - After adding a config field, add the key to `configs/configs.yaml` (and other environment files).
 
 ## Don't
 
 - Don't call `os.Getenv` in business code — put the value in a `Configs` and the config file.
-- Don't add `Init`/`Stop` orchestration by hand in `cmd/main` — register with the engine.
+- Don't start services by hand outside `rockservices`, and don't register them in the engine (`RegisterResource` no longer exists).
+- Don't put HTTP details (status codes, headers handling) into routes — tags in Params, status in `rockhttp.Endpoint`.
 - Don't create goroutines that outlive a request without tying them to an App's `ctx`.
-- Don't use `$VAR` (without braces) in config files, `config:"default:X"`, `BuildFiberEndpoint`, `pkg/libs/go-kit` — that is the old, removed API.
+- Don't use the removed API: `rockdelivery`, `rockengine.Resource`, `github.com/arzab/gorock-kit/rockfiber` & other non-core kit paths, `config:"default:X"`, `$VAR` without braces, `pkg/libs/go-kit`.

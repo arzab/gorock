@@ -42,8 +42,9 @@ project/
 | [Realm](https://arzab.github.io/gorock/architecture/realm) | Бизнес-логика, Delivery, Models |
 | [Toolkit](https://arzab.github.io/gorock/architecture/toolkit) | Services, Infra, Libs |
 | [Конфигурация](https://arzab.github.io/gorock/architecture/configs) | Конфиги как документация |
-| [gorock-kit](https://arzab.github.io/gorock/gorock-kit/) | Готовые модули: движок, конфиги, HTTP, события, расписание, PostgreSQL, Redis |
-| [Примеры](https://arzab.github.io/gorock/examples/) | [examples/taskapi](examples/taskapi) — эталонный проект |
+| [gorock-kit](https://arzab.github.io/gorock/gorock-kit/) | Ядро: движок apps, конфиги, сервисы, обработка запросов |
+| [Каталог](https://arzab.github.io/gorock/catalog/) | HTTP (rockhttp), PostgreSQL, Redis, логгер, события, расписание, Telegram |
+| [Примеры](https://arzab.github.io/gorock/examples/) | [examples/taskapi](examples/taskapi) — проект на gorock-kit v0.2.0 |
 
 ---
 
@@ -65,5 +66,6 @@ claude plugin install gorock@gorock
 | Репозиторий | Описание |
 |-------------|----------|
 | [arzab/gorock](https://github.com/arzab/gorock) | Архитектурный стандарт и документация |
-| [arzab/gorock-kit](https://github.com/arzab/gorock-kit) | Готовые реализации для GOROCK-проектов · v0.2.0, Go 1.26+ |
+| [arzab/gorock-kit](https://github.com/arzab/gorock-kit) | Ядро: rockengine, rockconfig, rockservices, rockhandlers · v0.3.0, Go 1.26+ |
+| [arzab/gorock-catalog](https://github.com/arzab/gorock-catalog) | Каталог: rockhttp и модули под конкретные технологии |
 | arzab/gorock-cli | Генератор слоёв и сущностей *(в разработке)* |

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 
 	"github.com/arzab/gorock-kit/rockconfig"
 	"github.com/arzab/gorock-kit/rockengine"
+	"github.com/arzab/gorock-kit/rockservices"
 
 	"__MODULE__/cmd/apps"
 	"__MODULE__/pkg/infra"
@@ -42,9 +44,14 @@ func Exec() error {
 		return fmt.Errorf("init infra: %w", err)
 	}
 
-	engine := rockengine.NewEngine()
-	services.Register(engine, cfg.Services) // resources: init first, stop last
-	apps.Register(engine, cfg.Apps)         // apps: start after resources, stop in reverse order
+	// services are a separate layer: up before the apps, down after them.
+	services.Register(rockservices.Default(), cfg.Services)
+	if err := rockservices.Init(context.Background()); err != nil {
+		return fmt.Errorf("init services: %w", err)
+	}
+	defer rockservices.Stop()
 
+	engine := rockengine.NewEngine()
+	apps.Register(engine, cfg.Apps)
 	return engine.Run() // blocks until SIGINT/SIGTERM or an app fails
 }

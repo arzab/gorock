@@ -1,16 +1,20 @@
 # rockbus
 
-<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockbus/README_RU.md — правьте README в gorock-kit. -->
+<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockbus/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · Engine · Apps
-Шина событий внутри процесса — App в `cmd/apps`. Подписки описываются в `internal/delivery/events`, публикация — из любого delivery через `rockbus.PublishAsync`. → [Apps](/architecture/apps)
+Шина событий внутри процесса — App в `cmd/apps`. Подписки описываются в `internal/delivery/events`, публикация — через `rockbus.PublishAsync`. → [Apps](/architecture/apps)
+:::
+
+::: warning Перенесён из gorock-kit v0.2.0 как есть
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rockbus@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockbus`. Модуль ещё не переведён на новое ядро: обработчики событий пока не на rockhandlers.
 :::
 
 ```sh
-go get github.com/arzab/gorock-kit/rockbus@latest
+go get github.com/arzab/gorock-catalog/rockbus@latest
 ```
 
-[Исходный код и README на GitHub](https://github.com/arzab/gorock-kit/tree/main/rockbus)
+[Исходный код и README на GitHub](https://github.com/arzab/gorock-catalog/tree/main/rockbus)
 
 Внутрипроцессная шина событий для Go-приложений. Позволяет слоям приложения общаться через типизированные события без прямых зависимостей друг от друга.
 

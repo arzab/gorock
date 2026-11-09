@@ -1,16 +1,17 @@
-# gorock-kit v0.2.x API (compact)
+# GOROCK API (compact): gorock-kit v0.3.x core + gorock-catalog
 
-Import path: `github.com/arzab/gorock-kit/<module>`. Go 1.26+. Modules don't import each other.
-Full READMEs: https://github.com/arzab/gorock-kit/tree/main/<module>
+Core: `github.com/arzab/gorock-kit/<module>` — rockengine, rockconfig, rockservices, rockhandlers. Modules don't import each other.
+Catalog: `github.com/arzab/gorock-catalog/<module>` — rockhttp (on rockhandlers) and the modules moved as-is from kit v0.2.0 (rocklog, rockfiber, rockbus, rockcron, rocktelebot, rockbun, rockredis). Go 1.26+.
+Full READMEs: https://github.com/arzab/gorock-kit/tree/main/<module>, https://github.com/arzab/gorock-catalog/tree/main/<module>
 
-## rockengine — lifecycle
+# Core (gorock-kit)
+
+## rockengine — apps lifecycle
 
 ```go
 type App interface { Init(ctx context.Context) error; Exec(ctx context.Context) error; Stop() []error }
-type Resource interface { Init(ctx context.Context) error; Stop() error }
 
 e := rockengine.NewEngine()                 // .WithShutdownTimeout(d) .WithStopOnFatal(bool) .WithFatalHandler(func(name string, err error))
-e.MustRegisterResource(name, res)           // RegisterResource(name, res) (*Engine, error)
 e.MustRegister(name, app, policy...)        // Register(name, app, policy...) (*Engine, error)
 err := e.Run()                              // RunContext(ctx); blocks until SIGINT/SIGTERM, ctx cancel, or an app fails
 e.StopApp(name); e.RestartApp(name); e.AppStatus(name); e.AppStatuses()
@@ -23,8 +24,8 @@ rockengine.RestartPolicy{
     OnFatal: func(err error){},
 }
 ```
-Order: resources init (registration order) → apps init → apps exec. Shutdown: apps one by one in reverse (cancel ctx → Stop → wait Exec), then resources in reverse. Default `StopOnFatal(true)`: a permanently failed app stops the engine and `Run` returns its error. Shutdown timeout 30s.
-Package-level default engine: `rockengine.Register`, `RegisterResource`, `Run`, `SetStopOnFatal`, ...
+The engine runs **apps only** (there are no resources any more). Order: apps Init in registration order → each Exec in its goroutine. Shutdown: apps one by one in reverse (cancel ctx → Stop → wait Exec). Default `StopOnFatal(true)`: a permanently failed app stops the engine and `Run` returns its error. Shutdown timeout 30s.
+Package-level default engine: `rockengine.Register`, `MustRegister`, `Run`, `SetStopOnFatal`, ...
 
 ## rockconfig — config file → struct
 
@@ -34,6 +35,62 @@ cfg, err := rockconfig.InitFromFile[Configs](path, rockconfig.AllowUnknownKeys()
 errors.Is(err, rockconfig.ErrMissingFields); errors.Is(err, rockconfig.ErrUnknownKeys)
 ```
 Tags: `config:"name"`, `config:",omitempty"`, `config:",default=8080"` (must be last option), `config:",env=VAR"`, `config:"-"`. Keys = snake_case of field names. File values: `${VAR}`, `${VAR:-default}`, `$${` = literal. Durations as strings.
+
+## rockservices — services layer
+
+```go
+type Service interface { Name() string; Init(ctx context.Context) error; Stop() error }
+
+rockservices.Add(c, ctor func(C) S, cfg C) S   // calls ctor now; panics on nil, empty/duplicate Name(), ctor panic, Add after Init
+rockservices.Get[S](name) S                    // from the default catalog; panics on unknown name / wrong type
+rockservices.Init(ctx) error                   // in Add order; on failure stops the started ones in reverse
+rockservices.Stop() error                      // reverse order, joins errors, idempotent, timeout 30s names the hanging one
+rockservices.Default() *Catalog; rockservices.New() *Catalog; c.WithStopTimeout(d); rockservices.GetFrom[S](c, name)
+prev := rockservices.SetDefault(c)             // tests only
+```
+cmd/main: `services.Register(rockservices.Default(), cfg.Services)` → `rockservices.Init(ctx)` → `defer rockservices.Stop()` → `engine.Run()`.
+A constructor may `Get` services added **before** it (keep the reference, use it from Init on). Conventions: `const Name = "repository"` + `func Get() Service { return rockservices.Get[Service](Name) }` in the service package; reusable components take the name from config (`Name string \`config:",default=postgres"\``); extra ctor args via a closure.
+
+## rockhandlers — transport-independent request handling
+
+```go
+type Handler[P, R any] func(c *Ctx[P, R]) error         // P, R: pointer-to-struct types
+// *Ctx[P, R] is a context.Context; fields Params P (filled by the transport), Result R (pre-allocated)
+c.Next() error; c.Route() string; c.Base(); c.SetContext(ctx)
+
+route := rockhandlers.Chain("tasks.create", steps...)   // Route (generics erased); P, R inferred; generic steps instantiated
+route = route.With(mws...)                              // first = outermost; later With wraps earlier
+rockhandlers.Prepend(steps, pre...)                     // for group functions
+type Middleware func(c rockhandlers.Context) error      // Context: context.Context + Route() + Next(); no Params access
+rockhandlers.Timeout(d) Middleware                      // cooperative deadline
+
+var UserKey = rockhandlers.NewLocal[*User]("user")      // UserKey.Set(c, u); u, ok := UserKey.Get(c); UserKey.MustGet(c)
+
+rockhandlers.Invalid/Unauthorized/Forbidden/NotFound/Conflict/Unavailable(msg, args...) *Error   // .WithFields(map) .Wrap(err)
+rockhandlers.KindOf(err)   // nil → KindNone; *Error → its kind; context.Canceled → KindCanceled; DeadlineExceeded → KindTimeout; else KindInternal
+rockhandlers.MessageOf(err) // "" for Internal; FieldsOf(err); *PanicError{Value, Stack}
+
+res, err := rockhandlers.Run[*Result](ctx, route, &Params{...})   // tests: whole chain without a transport
+// transports: result, err := route.Serve(ctx, func(params any) error { /* decode into params */ })
+```
+Order: middlewares → transport decoding (fill) → `Params.Validate()` → steps. A step that doesn't call `Next` ends the chain (early success is fine). On error the Result is dropped. Panics anywhere → Internal. Reusable steps needing request data are generic with an interface constraint (`func Bearer[P TokenParams, R any](c *rockhandlers.Ctx[P, R]) error`); models satisfy it by embedding (`steps.BearerAuth`). Short alias: `type Ctx = rockhandlers.Ctx[*Params, *Result]`.
+
+# Catalog (gorock-catalog)
+
+## rockhttp — HTTP App for rockhandlers (net/http, experimental)
+
+```go
+app := rockhttp.New(cfg rockhttp.Config, endpoints ...rockhttp.Endpoint).Use(mws ...rockhandlers.Middleware)
+rockhttp.Endpoint{Method: "POST", Path: "/tasks/{id}", Handler: route, Status: http.StatusCreated} // Status default 200; empty Result struct → 204
+rockhttp.SetCookie(c, *http.Cookie); rockhttp.SetHeader(c, k, v); rockhttp.Request(c) *http.Request   // inside steps
+// Result types with special meaning: *rockhttp.File{Name, ContentType, Content io.Reader, ModTime, Download}, *rockhttp.Redirect{URL, Code}
+app.Handler() http.Handler   // after Init — for httptest
+```
+Params tags: `path:"id"` (pattern `{id}`), `query:"x"` (slice = repeated), `header:"X-Y"`, `form:"x"` (`*multipart.FileHeader` / `[]*multipart.FileHeader` for uploads), JSON body via `json` tags. Tags in embedded structs are bound. Order: JSON, form, query, header, path.
+Error → status: Invalid 400, Unauthorized 401, Forbidden 403, NotFound 404, Conflict 409, Unavailable 503, Timeout 504, Canceled 499 (no body), Internal 500 (message hidden). Body: `{code, status, kind, message, fields}`.
+`rockhttp.Config` keys: `port` (required), `prefix`, `shutdown_timeout` (30s), `read_timeout` (15s), `write_timeout` (0 = none), `max_body_bytes` (10 MiB), `internal_message`. Code only: `OnError(r, route, err)` (response write failures only — log request errors in a rockhandlers middleware), `Middleware []func(http.Handler) http.Handler` (CORS, gzip…).
+
+> The modules below were moved from gorock-kit v0.2.0 as-is (import path `github.com/arzab/gorock-catalog/<module>`). They are not on the new core yet: apps' handlers aren't rockhandlers routes, and rockbun/rockredis have no `Name()` — use them as **child services inside your own service** (e.g. `repository` owns `rockbun.Service` and calls its Init/Stop), never with `RegisterResource` (removed from the kit).
 
 ## rocklog — logger (log/slog)
 
@@ -47,27 +104,9 @@ rocklog.ContextWithLogger(ctx, l); rocklog.New(cfg) Logger; rocklog.SetDefault(l
 ```
 Levels: `LevelDebug LevelInfo LevelWarn LevelError LevelFatal`. Formats: `FormatText FormatJSON`. `rocklog.Config` is not file-loadable (io.Writer, ints) — map from your own Configs in `pkg/infra/logs`.
 
-## rockfiber — HTTP App (Fiber v2)
+## rockfiber — HTTP App on Fiber v2 (older model)
 
-```go
-app := rockfiber.New(cfg rockfiber.Config, endpoints ...rockfiber.FiberEndpoint) // App; also SetEndpoints
-rockfiber.GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS(path, handlers ...fiber.Handler) FiberEndpoint
-rockfiber.NewEndpoint(method, path, handlers...) FiberEndpoint
-
-rockfiber.DefaultHandler[Params]()          // parse query/body/headers/path into Params, call Validate, store in Locals("params")
-rockfiber.DefaultHandler[Params]("key")     // custom Locals key
-rockfiber.GetFromContext[T](c, key) (*T, error)
-rockfiber.HandlerInitInCtx[T](key) fiber.Handler   // put new(T) into Locals
-rockfiber.ParseRequest(c, &p) error
-rockfiber.NewError(code, msg) *ErrorResponse      // .WithSource(s) .WithAction(a); JSON {code,status,message,source,action}
-rockfiber.TraceIdFromContext(c.UserContext()) string
-```
-Params tags: `query:"x"`, `json:"x"`, `form:"x"` (also `*multipart.FileHeader`), `reqHeader:"X-Y"`, `params:"id"` (path `/:id`). Params type needs `func (p *Params) Validate(*fiber.Ctx) error`.
-
-`rockfiber.Config` (file keys): `port` (required), `endpoints_path_prefix`, `admin_endpoints_path` (/admin), `admin_password`, `shutdown_timeout`, `tls_cert_file`, `tls_key_file`, `compress`, `helmet`, `pprof`, `use_trace_id`, `request_timeout`, `mask_internal_server_error_message`.
-Code only (`config:"-"`): `App fiber.Config`, `RateLimit *limiter.Config`, `Swagger *rockfiber.SwaggerConfig`, `MonitoringConfig *monitor.Config`, `CorsConfig *cors.Config` (nil = CORS off), `NotFound fiber.Handler`, `OnRequest func(path, traceId string)`, `OnError func(traceId string, err *rockfiber.ErrorResponse)`.
-Built-in: `GET /status`, `/admin/metrics`, `/admin/debug/pprof/*` (Pprof: true), behind `X-Admin-Password`.
-Error mapping: `*ErrorResponse` → its code; `*fiber.Error` → its code; other errors → 500 (message masked if configured; `OnError` gets the real one); panics → 500.
+Prefer **rockhttp** for new code. rockfiber keeps its own endpoint model (`rockfiber.GET(path, fiber.Handler...)`, `DefaultHandler[Params]()`, `GetFromContext`, `NewError(code, msg)`); see its README if a project already uses it.
 
 ## rockbus — in-process event bus (App)
 
@@ -104,7 +143,7 @@ rk := rocktelebot.NewReplyKeyboard(); rk.Row(rk.Text("A")).OneTime().Markup(); r
 ```
 Config keys: `token` (required), `webhook.listen`, `webhook.public_url` (empty listen = long polling).
 
-## rockbun — PostgreSQL (Resource)
+## rockbun — PostgreSQL (service, use as a child)
 
 ```go
 db := rockbun.NewService(rockbun.Configs{...})   // Service: Init(ctx) Stop() DB() *bun.DB Ping(ctx) RunInTx(ctx, *sql.TxOptions, func(ctx, bun.Tx) error)
@@ -112,7 +151,7 @@ db.DB().NewSelect().Model(&m).Where("id = ?", id).Scan(ctx)   // full bun query 
 ```
 Config keys (all optional): `dsn` (wins over fields), `host` (localhost), `port` (5432), `user`, `password`, `database`, `ssl_mode` (disable; use verify-full in prod), `max_open_conns` (25), `max_idle_conns` (5), `conn_max_lifetime` (1h), `conn_max_idle_time` (30m). Code only: `QueryHooks []bun.QueryHook`. Credentials are URL-escaped. After Stop, queries return `sql: database is closed`.
 
-## rockredis — Redis (Resource)
+## rockredis — Redis (service, use as a child)
 
 ```go
 r := rockredis.NewService(rockredis.Configs{Addr: "localhost:6379"})

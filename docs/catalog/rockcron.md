@@ -1,18 +1,22 @@
 # rockcron
 
-<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockcron/README_RU.md — правьте README в gorock-kit. -->
+<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockcron/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · Engine · Apps
 Планировщик — App в `cmd/apps`. Задачи описываются в `internal/delivery/jobs`. → [Apps](/architecture/apps)
 :::
 
+::: warning Перенесён из gorock-kit v0.2.0 как есть
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rockcron@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockcron`. Модуль ещё не переведён на новое ядро: задачи пока не на rockhandlers.
+:::
+
 ```sh
-go get github.com/arzab/gorock-kit/rockcron@latest
+go get github.com/arzab/gorock-catalog/rockcron@latest
 ```
 
-[Исходный код и README на GitHub](https://github.com/arzab/gorock-kit/tree/main/rockcron)
+[Исходный код и README на GitHub](https://github.com/arzab/gorock-catalog/tree/main/rockcron)
 
-Планировщик периодических задач для Go-приложений. Интегрируется с [rockengine](./rockengine) и предоставляет чистый интерфейс для запуска задач по расписанию.
+Планировщик периодических задач для Go-приложений. Интегрируется с [rockengine](/gorock-kit/rockengine) и предоставляет чистый интерфейс для запуска задач по расписанию.
 
 Каждый джоб определяет своё расписание — не нужно разносить расписание и логику по разным местам. Джобы выполняются в изолированных горутинах: если предыдущий запуск ещё не завершён — следующий тик пропускается. При остановке джобы, которые прямо сейчас выполняются, досчитываются до конца — джобы в ожидании следующего тика просто не запускаются.
 

@@ -22,13 +22,12 @@ Configs — это документация, которая всегда акт�
 
 ### Engine — `cmd/`
 
-`cmd/apps` агрегирует конфиги приложений. Готовые App из gorock-kit приносят свой конфиг:
+`cmd/apps` агрегирует конфиги приложений. Готовые App из каталога приносят свой конфиг:
 
 ```go
 // cmd/apps/apps.go
 type Configs struct {
-    HTTP rockfiber.Config                         // port, endpoints_path_prefix, request_timeout...
-    Bus  rockbus.Config  `config:",omitempty"`     // queue_size
+    HTTP rockhttp.Config                          // port, prefix, read_timeout, max_body_bytes...
     Cron rockcron.Config `config:",omitempty"`     // location
 }
 ```
@@ -142,7 +141,7 @@ type ServerConfigs struct {
     Port    string        `config:",default=8080"`
     Timeout time.Duration `config:",default=30s"`
     Debug   bool          `config:",omitempty"`
-    App     fiber.Config  `config:"-"`
+    OnError func(error)   `config:"-"`
 }
 ```
 

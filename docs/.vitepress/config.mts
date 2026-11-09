@@ -10,6 +10,7 @@ export default defineConfig({
     nav: [
       { text: 'Архитектура', link: '/architecture/' },
       { text: 'gorock-kit', link: '/gorock-kit/' },
+      { text: 'Каталог', link: '/catalog/' },
       { text: 'Примеры', link: '/examples/' },
       { text: 'Для ИИ', link: '/ai/' },
       { text: 'CLI', link: '/cli/' },
@@ -67,37 +68,42 @@ export default defineConfig({
 
       '/gorock-kit/': [
         {
-          text: 'gorock-kit',
+          text: 'gorock-kit — ядро',
           items: [
             { text: 'Введение', link: '/gorock-kit/' },
+            { text: 'rockengine — apps', link: '/gorock-kit/rockengine' },
+            { text: 'rockconfig — конфиг', link: '/gorock-kit/rockconfig' },
+            { text: 'rockservices — сервисы', link: '/gorock-kit/rockservices' },
+            { text: 'rockhandlers — обработка запросов', link: '/gorock-kit/rockhandlers' },
           ]
         },
+      ],
+      '/catalog/': [
         {
-          text: 'Engine',
+          text: 'Каталог',
           items: [
-            { text: 'rockengine', link: '/gorock-kit/rockengine' },
-            { text: 'rockconfig', link: '/gorock-kit/rockconfig' },
+            { text: 'Обзор', link: '/catalog/' },
           ]
         },
         {
           text: 'Apps',
           items: [
-            { text: 'rockfiber — HTTP', link: '/gorock-kit/rockfiber' },
-            { text: 'rockbus — события', link: '/gorock-kit/rockbus' },
-            { text: 'rockcron — расписание', link: '/gorock-kit/rockcron' },
-            { text: 'rocktelebot — Telegram', link: '/gorock-kit/rocktelebot' },
+            { text: 'rockhttp — HTTP', link: '/catalog/rockhttp' },
+            { text: 'rockfiber — HTTP (Fiber)', link: '/catalog/rockfiber' },
+            { text: 'rockbus — события', link: '/catalog/rockbus' },
+            { text: 'rockcron — расписание', link: '/catalog/rockcron' },
+            { text: 'rocktelebot — Telegram', link: '/catalog/rocktelebot' },
           ]
         },
         {
-          text: 'Toolkit',
+          text: 'Services и Infra',
           items: [
-            { text: 'rockbun — PostgreSQL', link: '/gorock-kit/rockbun' },
-            { text: 'rockredis — Redis', link: '/gorock-kit/rockredis' },
-            { text: 'rocklog — логгер', link: '/gorock-kit/rocklog' },
+            { text: 'rockbun — PostgreSQL', link: '/catalog/rockbun' },
+            { text: 'rockredis — Redis', link: '/catalog/rockredis' },
+            { text: 'rocklog — логгер', link: '/catalog/rocklog' },
           ]
         },
       ],
-
       '/examples/': [
         {
           text: 'Примеры',

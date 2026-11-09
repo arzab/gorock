@@ -1,16 +1,20 @@
 # rockbun
 
-<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockbun/README_RU.md — правьте README в gorock-kit. -->
+<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockbun/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · Toolkit · Services
-Готовый сервис PostgreSQL. Обычно — дочерний сервис внутри `pkg/services/repository`: repository описывает функционал проекта, rockbun даёт пул и запросы. Реализует `rockengine.Resource`. → [Services](/architecture/services)
+PostgreSQL через bun. Обычно — дочерний сервис внутри `pkg/services/repository`. → [Services](/architecture/services)
+:::
+
+::: warning Перенесён из gorock-kit v0.2.0 как есть
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rockbun@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockbun`. Модуль ещё не переведён на новое ядро: у сервиса нет `Name()`, поэтому в [rockservices](/gorock-kit/rockservices) его добавляют внутри своего сервиса (repository владеет rockbun), а не напрямую; в README ниже он ещё регистрируется как ресурс движка — этого механизма в kit v0.3.0 нет.
 :::
 
 ```sh
-go get github.com/arzab/gorock-kit/rockbun@latest
+go get github.com/arzab/gorock-catalog/rockbun@latest
 ```
 
-[Исходный код и README на GitHub](https://github.com/arzab/gorock-kit/tree/main/rockbun)
+[Исходный код и README на GitHub](https://github.com/arzab/gorock-catalog/tree/main/rockbun)
 
 Обёртка над [bun](https://bun.uptrace.dev/) ORM для PostgreSQL с интеграцией в `rockconfig` и управлением жизненным циклом (`Ping`, `Close`, `RunInTx`) через интерфейс `Service`.
 
