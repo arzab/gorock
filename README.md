@@ -52,5 +52,5 @@ project/
 | Репозиторий | Описание |
 |-------------|----------|
 | [arzab/gorock](https://github.com/arzab/gorock) | Архитектурный стандарт и документация |
-| [arzab/gorock-kit](https://github.com/arzab/gorock-kit) | Готовые реализации для GOROCK-проектов · v0.1.0 |
+| [arzab/gorock-kit](https://github.com/arzab/gorock-kit) | Готовые реализации для GOROCK-проектов · v0.2.0, Go 1.26+ |
 | arzab/gorock-cli | Генератор слоёв и сущностей *(в разработке)* |

@@ -4,7 +4,7 @@
 
 Архитектура GOROCK говорит, **где** лежит код. gorock-kit даёт готовый код для мест, которые в каждом проекте одинаковые: как запустить и остановить приложение, как принять HTTP-запрос, как загрузить конфиг. Вам остаётся писать только то, что уникально для проекта, — бизнес-логику в Realm.
 
-[GitHub](https://github.com/arzab/gorock-kit) · [CHANGELOG](https://github.com/arzab/gorock-kit/blob/main/CHANGELOG.md) · текущая версия **v0.1.0**
+[GitHub](https://github.com/arzab/gorock-kit) · [CHANGELOG](https://github.com/arzab/gorock-kit/blob/main/CHANGELOG.md) · текущая версия **v0.2.0** · требуется **Go 1.26+**
 
 ---
 
@@ -35,7 +35,7 @@ go get github.com/arzab/gorock-kit/rockfiber@latest
 # ... только нужные модули
 ```
 
-Все модули выпускаются одной версией. Теги — по модулю (`rockengine/v0.1.0`), как того требует Go для репозитория из нескольких модулей.
+Все модули выпускаются одной версией. Теги — по модулю (`rockengine/v0.2.0`), как того требует Go для репозитория из нескольких модулей.
 
 ---
 
