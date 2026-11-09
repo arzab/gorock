@@ -3,7 +3,7 @@ package logs
 import (
 	"fmt"
 
-	"github.com/arzab/gorock-kit/rocklog"
+	"github.com/arzab/gorock-catalog/rocklog"
 )
 
 // Configs is the file-loadable form of rocklog.Config.

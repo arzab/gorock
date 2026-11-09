@@ -21,16 +21,16 @@ pkg/libs/
 
 ## Libs и gorock-kit
 
-Раньше в `pkg/libs/go-kit` лежал общий код для HTTP-сервера, загрузки конфигов, парсинга параметров и логгера. Теперь это отдельная библиотека [gorock-kit](/gorock-kit/), и её модули подключаются как обычные зависимости через `go get` — копировать их в `pkg/libs` не нужно.
+Раньше в `pkg/libs/go-kit` лежал общий код для HTTP-сервера, загрузки конфигов, парсинга параметров и логгера. Теперь это ядро [gorock-kit](/gorock-kit/) и [каталог](/catalog/), и их модули подключаются как обычные зависимости через `go get` — копировать их в `pkg/libs` не нужно.
 
 | Было в `pkg/libs/go-kit` | Теперь |
 |---|---|
 | `configs.InitFromFile` | [rockconfig](/gorock-kit/rockconfig) |
-| `http/server`, `http/endpoints` | [rockfiber](/gorock-kit/rockfiber): `rockfiber.New`, `rockfiber.GET/POST/...` |
-| `http/params` | `rockfiber.DefaultHandler`, `rockfiber.ParseRequest` |
-| `http/responses` | `rockfiber.NewError`, `rockfiber.ErrorResponse` |
-| `http/utils` | `rockfiber.GetFromContext`, `rockfiber.HandlerInitInCtx` |
-| `logs` (logrus) | [rocklog](/gorock-kit/rocklog) (slog) |
+| `http/server`, `http/endpoints` | [rockhttp](/catalog/rockhttp): `rockhttp.New`, `rockhttp.Endpoint` |
+| цепочки handlers, `Locals` | [rockhandlers](/gorock-kit/rockhandlers): `Chain`, `Ctx.Next`, `NewLocal` |
+| `http/params` | теги `path` / `query` / `header` / `form` + `Params.Validate` |
+| `http/responses` | `rockhandlers.Invalid` / `NotFound` / … (статус выбирает транспорт) |
+| `logs` (logrus) | [rocklog](/catalog/rocklog) (slog) |
 
 В `pkg/libs` остаётся только то, что специфично для вашей команды или ваших проектов и не является обёрткой над внешней системой.
 

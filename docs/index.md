@@ -31,13 +31,13 @@ features:
 
   - icon: 📦
     title: gorock-kit
-    details: Готовый код для того, что в каждом проекте одинаковое — движок с graceful shutdown, загрузка конфигов с env, логгер, HTTP-сервер на Fiber, шина событий, планировщик, PostgreSQL и Redis.
+    details: Ядро для того, что в каждом проекте одинаковое — движок apps с graceful shutdown, конфиги с env, слой сервисов и обработка запросов без привязки к транспорту. HTTP, PostgreSQL, Redis, логгер и остальное — в каталоге.
     link: /gorock-kit/
-    linkText: Модули
+    linkText: Ядро и каталог
 
   - icon: 🧪
     title: Рабочий пример
-    details: Эталонный проект на gorock-kit — HTTP, PostgreSQL, события и расписание. Код в документации взят из него.
+    details: Проект на gorock-kit — HTTP, PostgreSQL, события и расписание.
     link: /examples/
     linkText: Примеры
 

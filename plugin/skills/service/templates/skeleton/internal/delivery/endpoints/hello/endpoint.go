@@ -1,40 +1,35 @@
 package hello
 
 import (
-	"net/http"
 	"strings"
 
-	"github.com/arzab/gorock-kit/rockfiber"
-	"github.com/gofiber/fiber/v2"
+	"github.com/arzab/gorock-kit/rockhandlers"
 )
 
-// GET /hello?name=Ann — a minimal self-describing endpoint.
+// GET /hello?name=Ann — a minimal route. It knows nothing about HTTP: the
+// transport fills Params (query tag) and turns the Result into JSON.
 
 type Params struct {
 	Name string `query:"name"`
 }
 
-func (p *Params) Validate(*fiber.Ctx) error {
+// Validate runs right after the request is decoded, before the steps.
+func (p *Params) Validate() error {
 	if strings.TrimSpace(p.Name) == "" {
-		return rockfiber.NewError(http.StatusBadRequest, "name is required")
+		return rockhandlers.Invalid("name is required") // → 400
 	}
 	return nil
 }
 
-type Response struct {
+type Result struct {
 	Message string `json:"message"`
 }
 
-func Endpoint() rockfiber.FiberEndpoint {
-	return rockfiber.GET("/hello", rockfiber.DefaultHandler[Params](), hello())
-}
+type Ctx = rockhandlers.Ctx[*Params, *Result]
 
-func hello() fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		params, err := rockfiber.GetFromContext[Params](c, "params")
-		if err != nil {
-			return err
-		}
-		return c.JSON(Response{Message: "Hello, " + params.Name})
-	}
+var Route = rockhandlers.Chain("hello", hello)
+
+func hello(c *Ctx) error {
+	c.Result.Message = "Hello, " + c.Params.Name
+	return nil
 }

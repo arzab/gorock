@@ -1,18 +1,22 @@
 # rocktelebot
 
-<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rocktelebot/README_RU.md — правьте README в gorock-kit. -->
+<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rocktelebot/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · Engine · Apps
 Telegram-бот — App в `cmd/apps`. Команды и обработчики описываются в `internal/delivery`. → [Apps](/architecture/apps)
 :::
 
+::: warning Перенесён из gorock-kit v0.2.0 как есть
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rocktelebot@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rocktelebot`. Модуль ещё не переведён на новое ядро: обработчики пока не на rockhandlers.
+:::
+
 ```sh
-go get github.com/arzab/gorock-kit/rocktelebot@latest
+go get github.com/arzab/gorock-catalog/rocktelebot@latest
 ```
 
-[Исходный код и README на GitHub](https://github.com/arzab/gorock-kit/tree/main/rocktelebot)
+[Исходный код и README на GitHub](https://github.com/arzab/gorock-catalog/tree/main/rocktelebot)
 
-Обёртка Telegram-бота на базе [telebot.v3](https://gopkg.in/telebot.v3) с интеграцией [rockengine](./rockengine), структурированной регистрацией хендлеров, встроенными мидлварами и билдерами клавиатур.
+Обёртка Telegram-бота на базе [telebot.v3](https://gopkg.in/telebot.v3) с интеграцией [rockengine](/gorock-kit/rockengine), структурированной регистрацией хендлеров, встроенными мидлварами и билдерами клавиатур.
 
 Реализует интерфейс rockengine `App` (`Init / Exec / Stop`).
 

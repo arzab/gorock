@@ -1,12 +1,16 @@
 # Примеры
 
-Рабочие проекты, которые можно запустить и разобрать. Код в документации взят из них.
+Рабочие проекты, которые можно запустить и разобрать.
 
 ---
 
+::: warning Примеры ещё на модели gorock-kit v0.2.0
+`taskapi` написан на gorock-kit `v0.2.0`: сервисы — ресурсы движка, HTTP — на Fiber (`rockfiber`), endpoints — цепочки `fiber.Handler`. В ядре v0.3.0 этого больше нет: сервисы — отдельный слой [rockservices](/gorock-kit/rockservices), обработка запросов — [rockhandlers](/gorock-kit/rockhandlers), HTTP — [rockhttp](/catalog/rockhttp). Код новой модели — в [Быстром старте](/architecture/getting-started); пример будет переведён на неё.
+:::
+
 ## taskapi — HTTP-сервис на PostgreSQL
 
-[examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi) — эталонный GOROCK-проект на gorock-kit. На нём построен [Быстрый старт](/architecture/getting-started).
+[examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi) — GOROCK-проект на gorock-kit v0.2.0.
 
 | Что показывает | Где |
 |---|---|
@@ -29,9 +33,3 @@ docker run -d --name tasks-db -p 5432:5432 \
 
 DB_PASSWORD=postgres go run ./cmd/main
 ```
-
----
-
-## fullapp — все модули gorock-kit
-
-[gorock-kit/examples/fullapp](https://github.com/arzab/gorock-kit/tree/main/examples/fullapp) — компактный сервис в одном файле, где подключены все модули: PostgreSQL и Redis как ресурсы, шина, планировщик, HTTP. Удобен, чтобы быстро увидеть API, но слои GOROCK в нём не разнесены по папкам.

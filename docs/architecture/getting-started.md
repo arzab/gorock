@@ -1,6 +1,6 @@
 # Быстрый старт
 
-Соберём HTTP-сервис задач на PostgreSQL: создать задачу, получить её, отправить событие, проверять базу по расписанию. Готовый результат — [examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi).
+Соберём HTTP-сервис задач на PostgreSQL: создать задачу и получить её.
 
 ::: info CLI
 Генератор слоёв `gorock` [в разработке](/cli/). Пока файлы создаются вручную — это недолго, и так понятнее, что где лежит.
@@ -16,13 +16,15 @@
 mkdir taskapi && cd taskapi
 go mod init github.com/yourname/taskapi
 
+# ядро
 go get github.com/arzab/gorock-kit/rockengine@latest \
        github.com/arzab/gorock-kit/rockconfig@latest \
-       github.com/arzab/gorock-kit/rocklog@latest \
-       github.com/arzab/gorock-kit/rockfiber@latest \
-       github.com/arzab/gorock-kit/rockbun@latest \
-       github.com/arzab/gorock-kit/rockbus@latest \
-       github.com/arzab/gorock-kit/rockcron@latest \
+       github.com/arzab/gorock-kit/rockservices@latest \
+       github.com/arzab/gorock-kit/rockhandlers@latest
+# каталог: HTTP, PostgreSQL, логгер
+go get github.com/arzab/gorock-catalog/rockhttp@latest \
+       github.com/arzab/gorock-catalog/rockbun@latest \
+       github.com/arzab/gorock-catalog/rocklog@latest \
        github.com/google/uuid@latest
 ```
 
@@ -33,13 +35,12 @@ go get github.com/arzab/gorock-kit/rockengine@latest \
 ```
 taskapi/
 ├── cmd/
-│   ├── main/main.go                      — Configs, загрузка, движок
-│   └── apps/apps.go                      — HTTP, шина событий, планировщик
+│   ├── main/main.go                      — Configs, загрузка, сервисы, движок
+│   └── apps/apps.go                      — HTTP App
 ├── internal/
 │   ├── delivery/
-│   │   ├── endpoints/                    — POST /tasks, GET /tasks/:id
-│   │   ├── events/events.go              — обработчик task.created
-│   │   └── jobs/jobs.go                  — ping-db раз в минуту
+│   │   ├── endpoints/                    — POST /tasks, GET /tasks/{id}
+│   │   └── middleware/log.go             — логирование ошибок
 │   └── models/task.go
 ├── pkg/
 │   ├── infra/                            — настройка логгера
@@ -54,40 +55,46 @@ taskapi/
 
 ## 3. Toolkit: репозиторий и логгер
 
-Репозиторий описывает функционал (сохранить, найти, обновить), а работу с PostgreSQL берёт у [rockbun](/gorock-kit/rockbun). Полный код — на странице [Services](/architecture/services#реализация-сервиса), коротко:
+Репозиторий описывает функционал (сохранить, найти, обновить), а работу с PostgreSQL берёт у [rockbun](/catalog/rockbun). Полный код — на странице [Services](/architecture/services#реализация-сервиса), коротко:
+
+```go
+// pkg/services/repository/interface.go
+const Name = "repository"
+
+type Service interface {
+    rockservices.Service
+    Insert(ctx context.Context, model any) error
+    GetByID(ctx context.Context, model any, id string) error
+}
+
+func Get() Service { return rockservices.Get[Service](Name) }
+```
 
 ```go
 // pkg/services/repository/service.go
-func NewService(cfg Configs) Service {
-    return &service{db: rockbun.NewService(cfg.Postgres)}
-}
+func NewService(cfg Configs) Service { return &service{db: rockbun.NewService(cfg.Postgres)} }
 
+func (s *service) Name() string                    { return Name }
 func (s *service) Init(ctx context.Context) error { return s.db.Init(ctx) }
 func (s *service) Stop() error                    { return s.db.Stop() }
-
-func (s *service) Insert(ctx context.Context, model any) error {
-    _, err := s.db.DB().NewInsert().Model(model).Exec(ctx)
-    return err
-}
 ```
 
 ```go
 // pkg/services/services.go
-var repo repository.Service
+type Configs struct {
+    Repository repository.Configs
+}
 
-func Repository() repository.Service { return repo }
-
-func Register(e *rockengine.Engine, cfg Configs) {
-    repo = repository.NewService(cfg.Repository)
-    e.MustRegisterResource("repository", repo)
+func Register(c *rockservices.Catalog, cfg Configs) {
+    rockservices.Add(c, repository.NewService, cfg.Repository)
 }
 ```
 
-Логгер — [rocklog](/gorock-kit/rocklog), `pkg/infra/logs` только переводит настройки из файла в `rocklog.Init` — см. [Infra](/architecture/infra#logs).
+Логгер — [rocklog](/catalog/rocklog), `pkg/infra/logs` только переводит настройки из файла в `rocklog.Init` — см. [Infra](/architecture/infra#logs).
 
 ---
 
-## 4. Realm: модель и endpoints
+## 4. Realm: модель и маршруты
 
 ```go
 // internal/models/task.go
@@ -102,13 +109,69 @@ type Task struct {
 ```
 
 ```go
-// internal/delivery/endpoints/create_task/endpoint.go
-func Endpoint() rockfiber.FiberEndpoint {
-    return rockfiber.POST("/tasks", handlers()...)
+// internal/delivery/endpoints/create_task/route.go
+type Params struct {
+    Title string `json:"title"`
+}
+
+func (p *Params) Validate() error {
+    if strings.TrimSpace(p.Title) == "" {
+        return rockhandlers.Invalid("title is required")
+    }
+    return nil
+}
+
+type Result struct {
+    Task *models.Task `json:"task"`
+}
+
+var Route = rockhandlers.Chain("tasks.create", func(c *rockhandlers.Ctx[*Params, *Result]) error {
+    task := &models.Task{ID: uuid.NewString(), Title: c.Params.Title}
+    if err := repository.Get().Insert(c, task); err != nil {
+        return fmt.Errorf("insert task: %w", err) // → 500, текст скрыт
+    }
+    c.Result.Task = task
+    return nil
+})
+```
+
+```go
+// internal/delivery/endpoints/get_task/route.go
+type Params struct {
+    ID string `path:"id"`
+}
+
+var Route = rockhandlers.Chain("tasks.get", func(c *rockhandlers.Ctx[*Params, *models.Task]) error {
+    err := repository.Get().GetByID(c, c.Result, c.Params.ID)
+    if errors.Is(err, repository.ErrNotFound) {
+        return rockhandlers.NotFound("task not found") // → 404
+    }
+    return err
+})
+```
+
+```go
+// internal/delivery/endpoints/endpoints.go
+func All() []rockhttp.Endpoint {
+    return []rockhttp.Endpoint{
+        {Method: "POST", Path: "/tasks", Handler: create_task.Route, Status: http.StatusCreated},
+        {Method: "GET", Path: "/tasks/{id}", Handler: get_task.Route},
+    }
 }
 ```
 
-Цепочка handlers, параметры, ответ, события и задачи — на странице [Delivery](/architecture/delivery).
+```go
+// internal/delivery/middleware/log.go
+func Log(c rockhandlers.Context) error {
+    err := c.Next()
+    if err != nil {
+        rocklog.Error("request failed", rocklog.Str("route", c.Route()), rocklog.Err(err))
+    }
+    return err
+}
+```
+
+Цепочки шагов, переиспользуемые шаги, Locals и группы — на странице [Delivery](/architecture/delivery).
 
 ---
 
@@ -116,13 +179,12 @@ func Endpoint() rockfiber.FiberEndpoint {
 
 ```go
 // cmd/apps/apps.go
-func Register(e *rockengine.Engine, cfg Configs) {
-    bus := rockbus.NewApp(cfg.Bus, onBusError, events.Subscriptions()...)
-    rockbus.SetDefault(bus)
-    e.MustRegister("bus", bus)
+type Configs struct {
+    HTTP rockhttp.Config
+}
 
-    e.MustRegister("cron", rockcron.NewApp(cfg.Cron, onJobError, jobs.All()...))
-    e.MustRegister("http", rockfiber.New(cfg.HTTP, endpoints.All()...))
+func Register(e *rockengine.Engine, cfg Configs) {
+    e.MustRegister("http", rockhttp.New(cfg.HTTP, endpoints.All()...).Use(middleware.Log))
 }
 ```
 
@@ -137,8 +199,13 @@ func Exec() error {
         return fmt.Errorf("init infra: %w", err)
     }
 
+    services.Register(rockservices.Default(), cfg.Services)
+    if err := rockservices.Init(context.Background()); err != nil {
+        return fmt.Errorf("init services: %w", err)
+    }
+    defer rockservices.Stop()
+
     engine := rockengine.NewEngine()
-    services.Register(engine, cfg.Services)
     apps.Register(engine, cfg.Apps)
     return engine.Run()
 }
@@ -168,10 +235,7 @@ services:
 apps:
   http:
     port: ${PORT:-8080}
-    endpoints_path_prefix: /api/v1
-    use_trace_id: true
-    request_timeout: 5s
-    mask_internal_server_error_message: internal server error
+    prefix: /api/v1
 ```
 
 Каждая секция — `Configs` своего слоя. Подробнее → [Конфигурация](/architecture/configs).
@@ -190,19 +254,16 @@ DB_PASSWORD=postgres go run ./cmd/main
 
 ```sh
 curl -X POST localhost:8080/api/v1/tasks -H 'Content-Type: application/json' -d '{"title":"write docs"}'
-# {"task":{"id":"8121...","title":"write docs","done":false,"created_at":"..."}}
+# 201 {"task":{"id":"8121...","title":"write docs","done":false,"created_at":"..."}}
+
+curl -X POST localhost:8080/api/v1/tasks -H 'Content-Type: application/json' -d '{"title":""}'
+# 400 {"code":400,"status":"Bad Request","kind":"invalid","message":"title is required"}
 
 curl localhost:8080/api/v1/tasks/nope
-# {"code":404,"status":"Not Found","message":"task not found"}
+# 404 {"code":404,"status":"Not Found","kind":"not_found","message":"task not found"}
 ```
 
-В логе появится событие с тем же trace_id, что у запроса:
-
-```json
-{"level":"info","msg":"task created","trace_id":"...","id":"8121...","title":"write docs"}
-```
-
-`Ctrl+C` — HTTP-сервер дообработает текущие запросы, затем остановятся планировщик и шина, последним закроется пул PostgreSQL.
+`Ctrl+C` — HTTP-сервер дообработает текущие запросы, затем закроется пул PostgreSQL.
 
 Без `DB_PASSWORD` приложение не стартует и скажет, чего не хватает:
 

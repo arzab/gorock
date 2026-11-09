@@ -1,8 +1,8 @@
 {
   "name": "gorock",
   "displayName": "GOROCK",
-  "version": "0.2.0",
-  "description": "Build Go services with the GOROCK architecture and gorock-kit: scaffold a project, add endpoints, services, events, jobs and apps the right way.",
+  "version": "0.3.0",
+  "description": "Build Go services with the GOROCK architecture and gorock-kit: scaffold a project, add routes, steps, services, events, jobs and apps the right way (gorock-kit v0.3 core + gorock-catalog).",
   "author": {
     "name": "arzab",
     "url": "https://github.com/arzab"

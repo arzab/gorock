@@ -1,6 +1,6 @@
 # rockconfig
 
-<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockconfig/README_RU.md — правьте README в gorock-kit. -->
+<!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockconfig/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · Configs
 Загружает единый файл конфига в агрегированный `Configs` в `cmd/main`. Каждый слой объявляет свой `Configs`, rockconfig проверяет их все разом. → [Конфигурация](/architecture/configs)
