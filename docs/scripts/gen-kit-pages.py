@@ -99,8 +99,11 @@ def page(module: str) -> tuple[str, str]:
         if target in MODULES:
             return f'](/{REPOS[MODULES[target][0]][1]}/{target})'
         return m.group(0)
-    body = re.sub(r'\]\(\.\./(rock[a-z]+)/?\)', link, body)
+    body = re.sub(r'\]\(\.\./(rock[a-z]+)(?:/README(?:_RU)?\.md)?/?\)', link, body)
     body = re.sub(r'\]\(https://github\.com/arzab/gorock-kit/tree/main/(rock[a-z]+)\)', link, body)
+    for g_repo, g_module, g_src, g_name, _ in GUIDES:  # links to guides inside the module
+        if g_module == module:
+            body = body.replace(f']({g_src})', f'](./{g_name})')
 
     header = (
         f'{title}\n\n'
@@ -113,7 +116,36 @@ def page(module: str) -> tuple[str, str]:
     return section, header + body.rstrip() + '\n'
 
 
+# Extra guides: (repo, module, source file, page name, unused)
+GUIDES = [
+    ('kit', 'rockhandlers', 'TRANSPORT_RU.md', 'rockhandlers-transport', None),
+]
+
+
+def guide(repo: str, module: str, src_name: str) -> tuple[str, str]:
+    checkout, section, url = REPOS[repo]
+    src = os.path.join(checkout, module, src_name)
+    with open(src, encoding='utf-8') as f:
+        text = f.read()
+    text = re.sub(r'\]\(\.\./(rock[a-z]+)(?:/README(?:_RU)?\.md)?/?\)',
+                  lambda m: f'](/{REPOS[MODULES[m.group(1)][0]][1]}/{m.group(1)})' if m.group(1) in MODULES else m.group(0), text)
+    text = text.replace('https://github.com/arzab/gorock-catalog/tree/main/rockhttp', '/catalog/rockhttp')
+    text = text.replace('https://arzab.github.io/gorock/architecture/apps', '/architecture/apps')
+    lines = text.splitlines()
+    header = (
+        f'{lines[0]}\n\n'
+        f'<!-- Сгенерировано docs/scripts/gen-kit-pages.py из {module}/{src_name} — правьте файл в репозитории модуля. -->\n\n'
+        f'[Исходный файл на GitHub]({url}/blob/main/{module}/{src_name})\n'
+    )
+    return section, header + '\n'.join(lines[1:]).rstrip() + '\n'
+
+
 def main() -> None:
+    for repo, module, src_name, name, _ in GUIDES:
+        section, text = guide(repo, module, src_name)
+        with open(os.path.join(ROOT, 'docs', section, f'{name}.md'), 'w', encoding='utf-8', newline='\n') as f:
+            f.write(text)
+        print(f'wrote {section}/{name}.md')
     for module in MODULES:
         section, text = page(module)
         out = os.path.join(ROOT, 'docs', section)
