@@ -2,120 +2,160 @@
 
 **Toolkit** · `pkg/infra/`
 
-Инфраструктурные примитивы которые обслуживают сам проект. Инициализируются первыми — раньше services и apps.
+Инфраструктурные примитивы, которые обслуживают сам проект. Инициализируются первыми — раньше services и apps.
 
 ```
 pkg/infra/
-├── main.go        — Configs + Init + Stop (только если нужно)
-├── logs/          — глобальный логгер
+├── infra.go       — Configs + Init
+├── logs/          — настройка глобального логгера
 ├── tracer/        — distributed tracing
-├── eventbus/      — внутренний publish/subscribe
-└── vars/          — env-переменные и feature flags
+└── vars/          — глобальные переменные и feature flags
 ```
 
 ---
 
 ## Что такое infra
 
-Обёртки над системами которые обслуживают **сам проект** — логирование, трассировка, внутренний event bus. В отличие от `pkg/services`, которые использует бизнес-логика, `pkg/infra` нужна всем слоям независимо от того что делает приложение.
+Обёртки над системами, которые обслуживают **сам проект**, — логирование, трассировка, глобальные настройки. В отличие от `pkg/services`, которыми пользуется бизнес-логика, `pkg/infra` нужна всем слоям независимо от того, что делает приложение.
 
-Infra не обязана следовать паттерну сервиса. Примитив может не иметь `Configs`, `Init`, `Stop` и интерфейса — достаточно набора глобальных функций. Форма определяется потребностью конкретного примитива.
+Infra не обязана следовать паттерну сервиса. Примитив может не иметь `Configs`, `Init` и интерфейса — достаточно набора функций пакета. Форма определяется потребностью конкретного примитива.
 
-`main.go` появляется только когда есть что инициализировать. Если все примитивы самодостаточны — он не нужен.
+---
+
+## `pkg/infra/infra.go`
+
+```go
+package infra
+
+import (
+    "fmt"
+
+    "github.com/yourname/taskapi/pkg/infra/logs"
+)
+
+type Configs struct {
+    Logs logs.Configs `config:",omitempty"`
+}
+
+// Init настраивает примитивы проекта. Вызывается первым, до движка.
+func Init(cfg Configs) error {
+    if err := logs.Init(cfg.Logs); err != nil {
+        return fmt.Errorf("init logs: %w", err)
+    }
+    return nil
+}
+```
+
+Infra не регистрируется в движке: у логгера нет соединений, которые нужно закрывать. Если у примитива они есть (например, экспортёр трейсов), сделайте его ресурсом — как сервис.
 
 ---
 
 ## logs
 
-Глобальный логгер. Простейший случай — набор функций без состояния после `Init`.
+Сам логгер уже есть — [rocklog](/gorock-kit/rocklog). Он сам по себе интерфейс (`rocklog.Logger`), поэтому отдельная обёртка над ним не нужна. Задача `pkg/infra/logs` — перевести настройки из файла конфига в `rocklog.Init`:
 
 ```go
 package logs
 
-func Init(configs Configs) { ... }
+import (
+    "fmt"
 
-func Infof(format string, args ...interface{})  { ... }
-func Errorf(format string, args ...interface{}) { ... }
-func Warnf(format string, args ...interface{})  { ... }
-func Fatalf(format string, args ...interface{}) { ... }
+    "github.com/arzab/gorock-kit/rocklog"
+)
 
-func InfoWithFields(obj interface{}, message string)  { ... }
-func ErrorWithFields(obj interface{}, message string) { ... }
+// Configs — то, что можно задать в файле.
+type Configs struct {
+    Level  string `config:",default=info"` // debug | info | warn | error
+    Format string `config:",default=json"` // json | text
+    Caller bool   `config:",omitempty"`
+}
+
+func Init(cfg Configs) error {
+    levels := map[string]rocklog.Level{
+        "debug": rocklog.LevelDebug, "info": rocklog.LevelInfo,
+        "warn": rocklog.LevelWarn, "error": rocklog.LevelError,
+    }
+    level, ok := levels[cfg.Level]
+    if !ok {
+        return fmt.Errorf("unknown log level %q", cfg.Level)
+    }
+
+    format := rocklog.FormatJSON
+    if cfg.Format == "text" {
+        format = rocklog.FormatText
+    }
+
+    rocklog.Init(rocklog.Config{Level: level, Format: format, Caller: cfg.Caller})
+    return nil
+}
 ```
 
-Все слои импортируют `pkg/infra/logs`, а не конкретную библиотеку напрямую. Это позволяет поменять реализацию в одном месте.
+Дальше все слои пишут через rocklog:
+
+```go
+rocklog.Info("task created", rocklog.Str("id", task.ID))
+
+// логгер запроса с trace_id — передаётся вместе с ctx в сервисы и события
+ctx = rocklog.WithContext(ctx, rocklog.Str("trace_id", traceId))
+rocklog.FromContext(ctx).Error("insert failed", rocklog.Err(err))
+```
+
+::: warning
+Не вызывайте `rocklog.Fatal` внутри apps и сервисов: он завершает процесс сразу и пропускает graceful shutdown всех остальных компонентов. Верните ошибку — движок решит, перезапустить компонент или остановить приложение.
+:::
 
 ---
 
 ## vars
 
-Env-переменные и настройки которые не принадлежат ни одному конкретному сервису — имя окружения, feature flags, shared-значения.
+Значения, которые не принадлежат ни одному сервису, — имя окружения, feature flags, shared-параметры.
 
 ```go
 package vars
 
 type Configs struct {
-	Env          string `json:"env"`
-	FeatureFlags map[string]bool `json:"feature_flags"`
+    Env          string          `config:",default=dev"`
+    FeatureFlags map[string]bool `config:",omitempty"`
 }
 
 var cfg Configs
 
-func Init(configs Configs){
-	cfg = configs
-}
+func Init(c Configs) { cfg = c }
 
-func Get() {return cfg}
-
+func Get() Configs { return cfg }
 ```
 
-Использование:
+Использование из любого слоя:
 
 ```go
-if vars.Get().Env == "dev" { ... }
+if vars.Get().Env == "prod" { ... }
 ```
 
 ---
 
 ## tracer
 
-Distributed tracing — трассировка запроса через все слои. Конкретная реализация (OpenTelemetry, Jaeger и др.) скрыта за функциями пакета.
+Distributed tracing — трассировка запроса через все слои. Конкретная реализация (OpenTelemetry и др.) скрыта за функциями пакета. Готового модуля в gorock-kit пока нет.
 
 ---
 
-## eventbus
+## События внутри процесса
 
-Внутренний publish/subscribe для event-driven логики в монолите. Любой слой публикует событие без прямой зависимости от обработчика.
+Раньше здесь жил `eventbus`. Теперь это готовая шина [rockbus](/gorock-kit/rockbus) — и она не infra, а **App**: у неё есть собственная работа (воркеры, очереди) и жизненный цикл. Регистрируется в `cmd/apps`, обработчики описываются в `internal/delivery/events`, публиковать можно из любого delivery:
 
 ```go
-package eventbus
-
-func Publish(id string, payload any) { ... }
-func Register(events []Event)        { ... }
-
-type Event struct {
-    ID      string
-    Handler func(payload any) error
-    Mode    EventMode
-}
-
-type EventMode int
-const (
-    Instant    EventMode = iota // горутина, fire and forget
-    WorkerPool                  // канал + N воркеров, контроль нагрузки
-    Queue                       // буферизованный канал, гарантия порядка
-)
+rockbus.PublishAsync(ctx, rockbus.Event{Topic: events.TaskCreated, Payload: *task})
 ```
 
-Обработчики описываются в `internal/delivery/events/` и регистрируются через `event_bus_app` — отдельный App в `cmd/apps`, который при `Init` вызывает `eventbus.Register`, а при `Exec` слушает и диспетчеризует события.
+В микросервисах шина внутри процесса обычно не нужна — event-driven выносится на уровень брокера (Kafka, NATS, Pub/Sub).
 
-В микросервисах eventbus не нужен — event-driven выносится на уровень инфраструктуры (Pub/Sub, Kafka).
+→ [Apps](/architecture/apps) · [Delivery](/architecture/delivery)
 
 ---
 
 ## Правила
 
 - **Infra инициализируется первой.** Логгер нужен всем уже при старте остальных слоёв.
-- **Доступ через функции пакета**, не через геттеры как в services: `logs.Infof(...)`, не `infra.Logs().Infof(...)`.
-- **Форма свободная.** Не нужно натягивать паттерн сервиса если примитив в нём не нуждается.
+- **Доступ через функции пакета**, не через геттеры как в services: `rocklog.Info(...)`, `vars.Get()`.
+- **Форма свободная.** Не нужно натягивать паттерн сервиса, если примитив в нём не нуждается.
 - **Нет привязки к предметной области.** Если примитив знает о конкретных сущностях проекта — он не infra.

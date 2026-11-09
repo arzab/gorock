@@ -2,168 +2,281 @@
 
 **Realm** · `internal/delivery/`
 
-Здесь вы готовите бизнес-логику. В delivery вы создаёте сущности которые описывают правила входящего запроса или события: что делать, в каком порядке, что вернуть.
+Здесь вы пишете бизнес-логику. Delivery-сущности описывают правила входящего запроса или события: что делать, в каком порядке, что вернуть.
 
 ```
 internal/delivery/
 ├── endpoints/
 │   ├── endpoints.go         — список всех HTTP endpoints
-│   └── create_user/         — один endpoint = одна папка
-│       ├── endpoint.go      — метод, путь, цепочка handlers
-│       ├── handlers.go      — цепочка функций, каждая делает один шаг
-│       ├── params.go        — Params: структура + InitParams() + GetParams()
-│       └── response.go      — Response: структура + InitResponse() + GetResponse()
-├── consumers/
-│   └── new_task.go          — handler-функция для consumer
-└── events/
-    └── user_created.go      — handler для внутреннего eventbus
+│   ├── create_task/         — один endpoint = одна папка
+│   │   ├── endpoint.go      — метод, путь, цепочка handlers
+│   │   ├── handlers.go      — цепочка функций, каждая делает один шаг
+│   │   ├── params.go        — Params + Validate + InitParams/GetParams
+│   │   └── response.go      — Response + InitResponse/GetResponse
+│   └── get_task/
+│       └── endpoint.go      — маленький endpoint может жить в одном файле
+├── events/
+│   └── events.go            — топики и обработчики событий шины
+└── jobs/
+    └── jobs.go              — задачи по расписанию
 ```
 
 ---
 
 ## Что такое delivery
 
-Delivery — это описание того что происходит при входящем запросе или событии. Каждая delivery-сущность описывает две вещи:
+Каждая delivery-сущность описывает две вещи:
 
-**Транспортные правила** — для HTTP: метод (`POST`), путь (`/users`), список обработчиков. Для consumer: функция-handler. Delivery само-описывает как его зарегистрировать — App просто получает список и регистрирует.
+**Транспортные правила** — для HTTP: метод (`POST`), путь (`/tasks`), список обработчиков. Для событий — топик и обработчик. Для расписания — интервал и функция. Delivery сам описывает, как его зарегистрировать, — App просто получает список и регистрирует.
 
-**Бизнес-поведение** — handlers это список функций, каждая делает один шаг. Вызвали сервис, обработали ошибку, сформировали ответ.
+**Бизнес-поведение** — handlers это список функций, каждая делает один шаг: распарсили, вызвали сервис, обработали ошибку, сформировали ответ.
 
-Формат delivery-сущностей определяется конкретным App — это решение разработчика.
+Формат delivery-сущностей определяется App, который их принимает. Для готовых App из gorock-kit это `rockfiber.FiberEndpoint`, `rockbus.Subscription`, `rockcron.Job`.
 
 ---
 
 ## Что использует delivery
 
-- `pkg/services` — для вызова бизнес-операций
+- `pkg/services` — для вызова операций над технологиями
 - `internal/models` — для работы со структурами данных
-- `pkg/infra/logs` — для логирования
+- [rocklog](/gorock-kit/rocklog) — для логирования
+- хелперы App: `rockfiber.NewError`, `rockfiber.DefaultHandler`, `rockbus.PublishAsync`
 
 Delivery не знает о `cmd/apps` — зависимость односторонняя: App подключает delivery, а не наоборот.
 
 ---
 
-## Форматы delivery-сущностей
+## HTTP endpoints
 
-### Функция — для consumer
-
-Простейший случай — delivery возвращает функцию нужного типа. App вызывает её и сам решает логику ack/nack по результату.
+### Список
 
 ```go
-// internal/models/entities/handler.go
-type MessageHandler func(msg *pubsub.Message) (err error, shouldNack bool)
+// internal/delivery/endpoints/endpoints.go
+package endpoints
 
-// internal/delivery/consumers/new_task.go
-func NewTask() entities.MessageHandler {
-    return func(msg *pubsub.Message) (err error, shouldNack bool) {
-        task := &models.Task{}
-        if err = json.Unmarshal(msg.Data, task); err != nil {
-            return fmt.Errorf("unmarshal task: %w", err), false
-        }
-
-        if err = services.FileStorage().DownloadFile(task.BucketName, task.ObjectName, archivePath); err != nil {
-            return fmt.Errorf("download file: %w", err), false
-        }
-
-        if err = services.RunManager().ExecChunk(tempDir); err != nil {
-            return fmt.Errorf("exec script: %w", err), false
-        }
-
-        return nil, false
+// All — все HTTP endpoints. HTTP App регистрирует их как есть.
+func All() []rockfiber.FiberEndpoint {
+    return []rockfiber.FiberEndpoint{
+        create_task.Endpoint(),
+        get_task.Endpoint(),
     }
 }
 ```
 
-App регистрирует handler при `Init`:
+### Endpoint сам себя описывает
 
 ```go
-// cmd/apps/rabbit_consumer/app.go
-func (a *app) Init() error {
-    a.handler = consumers.NewTask()
+// internal/delivery/endpoints/create_task/endpoint.go
+package create_task
+
+func Endpoint() rockfiber.FiberEndpoint {
+    return rockfiber.POST("/tasks", handlers()...)
+}
+```
+
+`rockfiber.GET`, `POST`, `PUT`, `PATCH`, `DELETE` — метод, путь и цепочка handlers. Общий префикс (`/api/v1`) задаётся в конфиге App, а не в каждом endpoint.
+
+### Цепочка handlers
+
+Бизнес-логика разбивается на несколько функций — каждая делает один шаг и вызывает `c.Next()`. Данные передаются через `fiber.Ctx.Locals`.
+
+```go
+// internal/delivery/endpoints/create_task/handlers.go
+func handlers() []fiber.Handler {
+    return []fiber.Handler{
+        InitParams(),   // парсинг и валидация входных данных
+        InitResponse(), // объект ответа
+        createTask(),   // бизнес-логика
+        sendResponse(), // сериализация
+    }
+}
+
+func createTask() fiber.Handler {
+    return func(c *fiber.Ctx) error {
+        params, err := GetParams(c)
+        if err != nil {
+            return err
+        }
+        resp, err := GetResponse(c)
+        if err != nil {
+            return err
+        }
+
+        // Логгер запроса с trace_id — уедет вместе с ctx в сервисы и в событие.
+        ctx := rocklog.WithContext(c.UserContext(),
+            rocklog.Str("trace_id", rockfiber.TraceIdFromContext(c.UserContext())))
+
+        task := &models.Task{ID: uuid.NewString(), Title: params.Title}
+        if err := services.Repository().Insert(ctx, task); err != nil {
+            return fmt.Errorf("insert task: %w", err) // обычная ошибка → 500
+        }
+
+        rockbus.PublishAsync(ctx, rockbus.Event{Topic: events.TaskCreated, Payload: *task})
+        resp.Task = task
+        return c.Next()
+    }
+}
+
+func sendResponse() fiber.Handler {
+    return func(c *fiber.Ctx) error {
+        resp, err := GetResponse(c)
+        if err != nil {
+            return err
+        }
+        return c.Status(http.StatusCreated).JSON(resp)
+    }
+}
+```
+
+### Params
+
+`rockfiber.DefaultHandler` разбирает query, тело, заголовки и параметры пути в одну структуру по тегам (`query`, `json`, `reqHeader`, `params`), вызывает `Validate` и кладёт результат в `ctx.Locals("params")`.
+
+```go
+// internal/delivery/endpoints/create_task/params.go
+type Params struct {
+    Title string `json:"title"`
+}
+
+func (p *Params) Validate(*fiber.Ctx) error {
+    if strings.TrimSpace(p.Title) == "" {
+        return rockfiber.NewError(http.StatusBadRequest, "title is required")
+    }
+    return nil
+}
+
+func InitParams() fiber.Handler { return rockfiber.DefaultHandler[Params]() }
+
+func GetParams(c *fiber.Ctx) (*Params, error) {
+    return rockfiber.GetFromContext[Params](c, "params")
+}
+```
+
+### Response
+
+```go
+// internal/delivery/endpoints/create_task/response.go
+type Response struct {
+    Task *models.Task `json:"task"`
+}
+
+const responseKey = "response"
+
+func InitResponse() fiber.Handler { return rockfiber.HandlerInitInCtx[Response](responseKey) }
+
+func GetResponse(c *fiber.Ctx) (*Response, error) {
+    return rockfiber.GetFromContext[Response](c, responseKey)
+}
+```
+
+### Ошибки — это бизнес-решения
+
+Что увидит клиент — решает delivery. `rockfiber.NewError` задаёт код и сообщение; любая другая ошибка превращается в 500, а её текст скрывается от клиента, если в конфиге задан `mask_internal_server_error_message`.
+
+```go
+// internal/delivery/endpoints/get_task/endpoint.go
+type Params struct {
+    ID string `params:"id"`
+}
+
+func (p *Params) Validate(*fiber.Ctx) error {
+    if p.ID == "" {
+        return rockfiber.NewError(http.StatusBadRequest, "id is required")
+    }
+    return nil
+}
+
+func Endpoint() rockfiber.FiberEndpoint {
+    return rockfiber.GET("/tasks/:id", rockfiber.DefaultHandler[Params](), getTask())
+}
+
+func getTask() fiber.Handler {
+    return func(c *fiber.Ctx) error {
+        params, err := rockfiber.GetFromContext[Params](c, "params")
+        if err != nil {
+            return err
+        }
+
+        task := &models.Task{}
+        err = services.Repository().GetByID(c.UserContext(), task, params.ID)
+        if errors.Is(err, repository.ErrNotFound) {
+            return rockfiber.NewError(http.StatusNotFound, "task not found") // 404
+        }
+        if err != nil {
+            return err // 500
+        }
+        return c.JSON(task)
+    }
+}
+```
+
+---
+
+## События
+
+Обработчики событий шины [rockbus](/gorock-kit/rockbus) — такие же delivery-сущности: топик и функция.
+
+```go
+// internal/delivery/events/events.go
+package events
+
+const TaskCreated rockbus.Topic = "task.created"
+
+// Subscriptions — все обработчики событий. Bus App регистрирует их.
+func Subscriptions() []rockbus.Subscription {
+    return []rockbus.Subscription{
+        rockbus.On(TaskCreated, onTaskCreated),
+    }
+}
+
+func onTaskCreated(ctx context.Context) error {
+    task, err := rockbus.Payload[models.Task](ctx)
+    if err != nil {
+        return err
+    }
+    rocklog.FromContext(ctx).Info("task created", rocklog.Str("id", task.ID))
     return nil
 }
 ```
 
-### Самоописывающаяся структура — для HTTP
+Логгер с `trace_id`, положенный в `ctx` в HTTP-обработчике, доходит сюда: в логе события будет тот же trace_id, что и у запроса.
 
-Endpoint сам описывает себя: метод, путь, цепочка handlers. App регистрирует маршруты не зная деталей каждого endpoint.
+---
+
+## Задачи по расписанию
 
 ```go
-// internal/delivery/endpoints/endpoints.go
-func HttpEndpoints() []endpoints.FiberEndpoint {
-    return []endpoints.FiberEndpoint{
-        exec.Endpoint(),
+// internal/delivery/jobs/jobs.go
+package jobs
+
+// All — все задачи. Cron App регистрирует их.
+func All() []rockcron.Job {
+    return []rockcron.Job{
+        rockcron.Every("ping-db", time.Minute, pingDB),
+        rockcron.Cron("daily-report", "0 3 * * *", buildReport, sendReport),
     }
 }
 
-// internal/delivery/endpoints/exec/endpoint.go
-func Endpoint() endpoints.FiberEndpoint {
-    return endpoints.BuildFiberEndpoint("post", "/exec", handlers())
+func pingDB(ctx context.Context) error {
+    return services.Repository().Ping(ctx)
 }
 ```
 
-### Цепочка handlers
-
-Бизнес-логика разбивается на несколько функций — каждая делает один шаг. Данные передаются через shared-контекст (например `fiber.Ctx.Locals`).
-
-```go
-// internal/delivery/endpoints/exec/handlers.go
-func handlers() []fiber.Handler {
-    return []fiber.Handler{
-        InitParams(),     // парсинг и валидация входных данных
-        InitResponse(),   // инициализация объекта ответа
-        execScript(),     // бизнес-логика
-        returnResponse(), // сериализация и отправка ответа
-    }
-}
-
-func execScript() fiber.Handler {
-    return func(ctx *fiber.Ctx) error {
-        params, err := GetParams(ctx)
-        if err != nil {
-            return err
-        }
-        // вызов services...
-        return ctx.Next()
-    }
-}
-```
-
-`params.go` и `response.go` хранят типизированные объекты в контексте:
-
-```go
-// params.go
-type Params struct {
-    RunId string `json:"run_id"`
-}
-
-func InitParams() fiber.Handler { return params.DefaultHandler[Params]() }
-func GetParams(ctx *fiber.Ctx) (*Params, error) { ... }
-
-// response.go
-type Response struct {
-    Status string `json:"status"`
-}
-
-func InitResponse() fiber.Handler { return http.HandlerInitInCtx[Response]("response") }
-func GetResponse(ctx *fiber.Ctx) (*Response, error) { ... }
-```
+Несколько функций в задаче выполняются по очереди, как цепочка handlers: первая ошибка останавливает цепочку и уходит в обработчик ошибок App.
 
 ---
 
 ## Версионирование
 
-При необходимости поддерживать несколько версий API — через папки:
+Несколько версий API — через папки:
 
 ```
 internal/delivery/endpoints/
 ├── endpoints.go
 ├── v1/
-│   └── exec/
-│       └── ...
+│   └── create_task/
 └── v2/
-    └── exec/
-        └── ...
+    └── create_task/
 ```
 
 ---
@@ -171,7 +284,7 @@ internal/delivery/endpoints/
 ## Правила
 
 - **Delivery описывает себя.** Endpoint знает path, method, handlers. App просто регистрирует — не вникает в логику.
-- **Никаких гигантских handlers.** Каждая функция делает один шаг — парсинг, валидация, вызов сервиса, формирование ответа.
-- **Ошибки возвращаются наверх.** Delivery возвращает ошибку с контекстом, App маппит её в транспортный ответ (HTTP-код, ack/nack).
-- **Форма delivery — решение разработчика.** Архитектура описывает слой, но не диктует технологию.
+- **Никаких гигантских handlers.** Каждая функция делает один шаг — парсинг, валидация, вызов сервиса, ответ.
+- **Ошибки — бизнес-решения.** `rockfiber.NewError` — когда клиент должен получить конкретный код; обычная ошибка с контекстом (`fmt.Errorf("...: %w", err)`) — для непредвиденного.
+- **`c.UserContext()` — в сервисы.** В нём дедлайн запроса и trace_id.
 - **Зависимость односторонняя.** Delivery знает о services и models, но не о apps.

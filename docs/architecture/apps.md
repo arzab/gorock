@@ -2,162 +2,235 @@
 
 **Engine** · `cmd/apps/`
 
-Здесь вы реализуете логику вашего приложения. App оборачивает технологию взаимодействия — HTTP-сервер, consumer, scheduler, CLI — и умеет принимать delivery-сущности из Realm и обрабатывать их результаты.
+App оборачивает технологию взаимодействия — HTTP-сервер, consumer, планировщик, бот — и умеет принимать delivery-сущности из Realm и обрабатывать их результаты.
 
 ```
 cmd/apps/
-├── configs.go          — Configs: агрегирует конфиги всех Apps
-├── main.go             — список App, Init(configs Configs), Exec() []error
-├── interface.go        — интерфейс App
-├── http_server/
-│   ├── configs.go      — Configs (port, timeout, api_path, ...)
-│   └── app.go          — реализация, NewApp(configs Configs) apps.Interface
-└── rabbit_consumer/
-    ├── configs.go      — Configs (queue, prefetch, ...)
-    └── app.go          — реализация, NewApp(configs Configs) apps.Interface
+├── apps.go            — Configs всех Apps + Register(engine, configs)
+└── queue_consumer/    — свой App, только если готового в gorock-kit нет
+    ├── configs.go
+    └── app.go
 ```
+
+Для HTTP, событий, расписания и Telegram папки не нужны: готовые App из gorock-kit создаются прямо в `apps.go`.
 
 ---
 
 ## Что такое App
 
-App — обёртка над технологией взаимодействия. HTTP, очередь, CLI, таймер — это технологии через которые кто-то хочет что-то от системы. App оборачивает эту технологию и берёт на себя три ответственности:
+HTTP, очередь, CLI, таймер — это технологии, через которые кто-то хочет что-то от системы. App оборачивает технологию и берёт на себя три ответственности:
 
-**1. Гарантии работоспособности транспорта**
-Panic recovery, логирование, трассировка, метрики — всё что должно быть в любом App независимо от бизнеса. Разработчик не думает об этом: App даёт это из коробки.
+**1. Гарантии работоспособности транспорта.**
+Panic recovery, логирование, trace-id, метрики — всё, что должно быть в любом App независимо от бизнеса.
 
-**2. Обработка результатов Realm**
-Realm возвращает типизированную ошибку с конкретным кодом или обычную ошибку. App знает язык протокола — HTTP коды, ack/nack, exit codes. Realm знает язык бизнеса. App переводит одно в другое.
+**2. Обработка результатов Realm.**
+Realm возвращает типизированную ошибку с конкретным кодом или обычную ошибку. App знает язык протокола — HTTP-коды, ack/nack, exit codes — и переводит одно в другое.
 
-**3. Контракт с Realm через самоописывающиеся сущности**
-Realm описывает свои обработчики сам — метод, путь, handlers. App регистрирует их не зная деталей. Не App диктует Realm как писать — Realm говорит App что зарегистрировать.
+**3. Контракт с Realm через самоописывающиеся сущности.**
+Realm описывает свои обработчики сам — метод, путь, handlers. App регистрирует их, не зная деталей. Не App диктует Realm, как писать, — Realm говорит App, что зарегистрировать.
 
 ---
 
 ## Интерфейс
 
+App — это `rockengine.App`:
+
 ```go
-// cmd/apps/interface.go
-type Interface interface {
-    Init() error
-    Exec() error
-    Shutdown() error // сигнал "заканчивай текущее, новое не принимай"
-    Stop() []error   // моментальная остановка
+type App interface {
+    Init(ctx context.Context) error
+    Exec(ctx context.Context) error
+    Stop() []error
 }
 ```
 
-`Init` — подготовка: регистрация delivery-сущностей из Realm.
+| Метод | Когда | Что делает |
+|---|---|---|
+| `Init(ctx)` | после инициализации всех сервисов | подготовка: создать сервер или клиента, зарегистрировать delivery-сущности |
+| `Exec(ctx)` | после `Init` всех apps, в своей горутине | работа. Для long-running — до отмены `ctx`; при отмене перестать принимать новое, завершить текущее и вернуться |
+| `Stop()` | при остановке, сразу после отмены `ctx` | разблокировать `Exec`, если он блокирующий (например, `server.Shutdown`), и дождаться текущей работы |
 
-`Exec` — запуск. Для long-running блокирующий, для short-running завершается когда работа сделана.
+Отдельного `Shutdown` нет: «заканчивай текущее, новое не принимай» — это отмена `ctx`, переданного в `Exec`. Движок вызывает `Stop` не больше одного раза на каждый успешный `Init` и сам следит за таймаутом. Что бы `Exec` ни вернул после отмены `ctx`, это чистая остановка, а не ошибка.
 
-`Shutdown` — начало мягкой остановки: перестать принимать новое, дождаться завершения текущего.
+---
 
-`Stop` — финальная очистка ресурсов.
+## `cmd/apps/apps.go`
 
-Оркестрацией занимается Main — запуск, ожидание сигнала ОС, вызов `Shutdown`/`Stop`. App не знает о других App.
+Единственная точка входа в слой: собирает конфиги и регистрирует все App.
+
+```go
+package apps
+
+type Configs struct {
+    HTTP rockfiber.Config
+    Bus  rockbus.Config  `config:",omitempty"`
+    Cron rockcron.Config `config:",omitempty"`
+}
+
+// Порядок важен: apps останавливаются в обратном порядке, поэтому HTTP-сервер
+// (зарегистрирован последним) остановится первым, пока шина ещё работает.
+func Register(e *rockengine.Engine, cfg Configs) {
+    bus := rockbus.NewApp(cfg.Bus, onBusError, events.Subscriptions()...)
+    rockbus.SetDefault(bus)
+    e.MustRegister("bus", bus)
+
+    e.MustRegister("cron", rockcron.NewApp(cfg.Cron, onJobError, jobs.All()...))
+
+    cfg.HTTP.OnError = func(traceId string, err *rockfiber.ErrorResponse) {
+        log := rocklog.With(rocklog.Str("trace_id", traceId), rocklog.Int("code", err.Code))
+        if err.Code >= 500 {
+            log.Error("http error", rocklog.Str("error", err.Message)) // настоящее сообщение, даже если клиенту оно скрыто
+            return
+        }
+        log.Warn("http client error", rocklog.Str("error", err.Message))
+    }
+    http := rockfiber.New(cfg.HTTP, endpoints.All()...)
+    e.MustRegister("http", http, rockengine.RestartPolicy{MaxRetries: 3, Delay: time.Second, ResetAfter: time.Minute})
+}
+
+func onBusError(ctx context.Context, event rockbus.Event, err error) {
+    rocklog.FromContext(ctx).Error("event failed", rocklog.Str("topic", string(event.Topic)), rocklog.Err(err))
+}
+
+func onJobError(ctx context.Context, job rockcron.Job, err error) {
+    rocklog.Error("job failed", rocklog.Str("job", rockcron.JobName(job)), rocklog.Err(err))
+}
+```
+
+App получает от Realm список сущностей — `endpoints.All()`, `events.Subscriptions()`, `jobs.All()` — и регистрирует их, не вникая в логику.
+
+`RestartPolicy` — что делать, если `Exec` вернул ошибку или запаниковал: сколько раз перезапустить и с какой паузой. Без политики упавший App останавливает весь процесс — это безопаснее, чем работать без HTTP-сервера. Подробнее → [rockengine](/gorock-kit/rockengine).
 
 ---
 
 ## Обработка результатов Realm
 
-App знает язык своего протокола, Realm знает язык бизнеса. App переводит одно в другое.
+App знает язык своего протокола, Realm знает язык бизнеса. В [rockfiber](/gorock-kit/rockfiber) перевод уже встроен:
 
-Если delivery вернул обычную `error` — это непредвиденная ошибка, возвращаем 500. Если delivery вернул типизированный `ResponseError` с кодом — возвращаем именно его:
-
-```go
-func (a *app) handleError(ctx *fiber.Ctx, err error) error {
-    var respErr *responses.ErrorResponse
-    if errors.As(err, &respErr) {
-        // Delivery явно сказал что вернуть — используем его код
-        return ctx.Status(respErr.Code).JSON(respErr)
-    }
-    // Непредвиденная ошибка — 500
-    return ctx.Status(500).JSON(responses.NewError(500, "internal error"))
-}
-```
-
-Delivery возвращает типизированную ошибку так:
+| Delivery вернул | Клиент получит |
+|---|---|
+| `rockfiber.NewError(404, "task not found")` | `404 {"code":404,"status":"Not Found","message":"task not found"}` |
+| любую другую `error` | `500`; текст заменяется на `mask_internal_server_error_message`, если он задан, а настоящий уходит в `OnError` |
+| паника | `500`, стек в stderr; сервер продолжает работать |
 
 ```go
-// internal/delivery/endpoints/create_user/handlers.go
-func createUser() fiber.Handler {
-    return func(ctx *fiber.Ctx) error {
-        params, _ := GetParams(ctx)
-        if params.Email == "" {
-            return responses.NewError(400, "email is required")
-        }
-        if err := services.Repository().Save(&models.User{Email: params.Email}); err != nil {
-            return responses.NewError(500, "failed to create user")
-        }
-        return ctx.Next()
-    }
+// internal/delivery/endpoints/get_task/endpoint.go
+err = services.Repository().GetByID(c.UserContext(), task, params.ID)
+if errors.Is(err, repository.ErrNotFound) {
+    return rockfiber.NewError(http.StatusNotFound, "task not found") // бизнес-решение: 404
+}
+if err != nil {
+    return err // непредвиденное: 500
 }
 ```
-
----
-
-## Два типа App
-
-**Long-running** — HTTP сервер, consumer, scheduler. Работают пока не получат сигнал остановки. `Exec` блокирующий — Main запускает его в горутине.
-
-**Short-running** — CLI, скрипты, миграции. Выполнили задачу и завершились. `Exec` возвращает управление когда работа сделана. Retry loop и ожидание сигнала ОС не нужны.
 
 ---
 
 ## Готовые App из gorock-kit
 
-Для большинства проектов своё App писать не нужно. gorock-kit содержит готовые реализации с батареей включённой:
-
-| App | Пакет | Что делает |
+| App | Модуль | Delivery-сущности |
 |-----|-------|------------|
-| HTTP сервер | `gorock/kit/apps/http` | Fiber с middleware, panic recovery, graceful shutdown |
-| Consumer | `gorock/kit/apps/consumer` | Pub/Sub consumer с ack/nack логикой |
-| Scheduler | `gorock/kit/apps/scheduler` | Планировщик задач по расписанию |
-| CLI | `gorock/kit/apps/cli` | CLI приложение с командами |
+| HTTP-сервер | [rockfiber](/gorock-kit/rockfiber) | `[]rockfiber.FiberEndpoint` из `internal/delivery/endpoints` |
+| Шина событий | [rockbus](/gorock-kit/rockbus) | `[]rockbus.Subscription` из `internal/delivery/events` |
+| Планировщик | [rockcron](/gorock-kit/rockcron) | `[]rockcron.Job` из `internal/delivery/jobs` |
+| Telegram-бот | [rocktelebot](/gorock-kit/rocktelebot) | `[]rocktelebot.Handler` из `internal/delivery/bot` |
 
 ---
 
 ## Как написать свой App
 
-Свой App нужен когда готовые из gorock-kit не подходят — нестандартный транспорт, особая логика обработки ошибок, специфичные гарантии.
+Свой App нужен, когда готового нет — например, consumer очереди или gRPC-сервер. Ответьте на три вопроса:
 
-При написании своего App нужно ответить на три вопроса:
-
-1. **Что гарантирует мой транспорт?** — какие middleware, какая обработка паник, какое логирование
-2. **Как я обрабатываю результаты Realm?** — как типизированные ошибки превращаются в ответ протокола
-3. **Какой контракт я даю Realm?** — какой интерфейс должны реализовывать delivery-сущности чтобы App мог их зарегистрировать
-
-**Минимальный пример:**
+1. **Что гарантирует мой транспорт?** — panic recovery, логирование, ack/nack.
+2. **Как я перевожу результаты Realm?** — какая ошибка во что превращается.
+3. **Какой контракт я даю Realm?** — какой тип должны иметь delivery-сущности.
 
 ```go
-// cmd/apps/my_app/app.go
-type app struct {
-    configs Configs
+// cmd/apps/queue_consumer/app.go
+package queue_consumer
+
+// Handler — контракт для Realm: delivery описывает обработчики этого типа.
+type Handler func(ctx context.Context, body []byte) error
+
+type App struct {
+    cfg      Configs
+    handlers map[string]Handler
+    conn     *queue.Conn
+    started  atomic.Bool
 }
 
-func (a *app) Init() error {
-    // подготовка: соединения, регистрация обработчиков из Realm
+func NewApp(cfg Configs, handlers map[string]Handler) *App {
+    return &App{cfg: cfg, handlers: handlers}
+}
+
+func (a *App) Init(ctx context.Context) error {
+    conn, err := queue.Dial(ctx, a.cfg.URL)
+    if err != nil {
+        return fmt.Errorf("dial: %w", err)
+    }
+    a.conn = conn
+    a.started.Store(false) // Init вызывается заново при рестарте
     return nil
 }
 
-func (a *app) Exec() error {
-    // запуск — блокирующий для long-running, обычный для short-running
-    return nil
+func (a *App) Exec(ctx context.Context) error {
+    a.started.Store(true)
+    defer a.conn.Close() // с момента запуска соединением владеет Exec
+    for {
+        msg, err := a.conn.Receive(ctx) // возвращается при отмене ctx
+        if err != nil {
+            return err // после отмены ctx движок считает это чистой остановкой
+        }
+        a.handle(ctx, msg) // текущее сообщение дообрабатывается до конца
+    }
 }
 
-func (a *app) Shutdown() error {
-    // перестать принимать новое, дать завершиться текущему
-    return nil
+func (a *App) handle(ctx context.Context, msg *queue.Message) {
+    defer func() { // гарантия №1: паника в Realm не роняет consumer
+        if r := recover(); r != nil {
+            rocklog.Error("handler panic", rocklog.Any("panic", r))
+            msg.Nack()
+        }
+    }()
+    if err := a.handlers[msg.Topic](ctx, msg.Body); err != nil { // гарантия №2: ошибка → nack
+        rocklog.FromContext(ctx).Error("handle message", rocklog.Err(err))
+        msg.Nack()
+        return
+    }
+    msg.Ack()
 }
 
-func (a *app) Stop() []error {
-    // финальная очистка ресурсов
-    return nil
+// Exec сам реагирует на отмену ctx, поэтому разблокировать его не нужно —
+// движок отменит ctx и дождётся возврата Exec. Stop убирает за собой только
+// если Exec так и не запустился (например, на старте упал другой App).
+func (a *App) Stop() []error {
+    if a.conn == nil || a.started.Load() {
+        return nil
+    }
+    return []error{a.conn.Close()}
 }
+```
 
-func NewApp(configs Configs) apps.Interface {
-    return &app{configs: configs}
+`queue` здесь — условный клиент вашей очереди. Регистрация — как у готовых: `e.MustRegister("consumer", queue_consumer.NewApp(cfg.Consumer, consumers.All()))`.
+
+::: warning Stop не должен ждать Exec
+`Stop` вызывается и тогда, когда `Exec` не запускался: движок останавливает уже инициализированные компоненты, если другой упал на старте. `Stop`, который ждёт сигнала от `Exec`, в этом случае зависнет навсегда.
+:::
+
+---
+
+## Short-running
+
+CLI, миграции, разовые скрипты выполняют задачу и завершаются. Движок рассчитан на long-running процессы: `Run` ждёт сигнала ОС, даже когда все App закончили работу. Для short-running задачи движок не нужен — вызовите сервисы напрямую:
+
+```go
+// cmd/migrate/main.go
+repo := repository.NewService(cfg.Services.Repository)
+if err := repo.Init(ctx); err != nil {
+    return err
 }
+defer repo.Stop()
+
+return migrations.Run(ctx, repo)
 ```
 
 ---
@@ -165,6 +238,7 @@ func NewApp(configs Configs) apps.Interface {
 ## Правила
 
 - **App решает когда, Realm решает что.** Транспорт и lifecycle — App. Бизнес-логика — delivery.
-- **Apps не общаются между собой** напрямую — только через `pkg/services` или `pkg/infra/eventbus`.
-- **Graceful shutdown — ответственность App.** Он знает как корректно завершить свою работу.
-- **Short-running App не нуждается в retry loop.** Выполнил задачу — вернул управление.
+- **Готовый App из gorock-kit — по умолчанию.** Свой — только когда готового нет.
+- **Apps не общаются между собой** напрямую — только через `pkg/services` или шину событий ([rockbus](/gorock-kit/rockbus)).
+- **Порядок регистрации = обратный порядок остановки.** То, от чего зависят другие apps, регистрируйте раньше.
+- **`Exec` возвращается при отмене `ctx`.** Если `Exec` блокирующий, `Stop` должен его разблокировать.

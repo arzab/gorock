@@ -36,11 +36,14 @@ project/
 | Раздел | |
 |--------|-|
 | [Что такое GOROCK](https://arzab.github.io/gorock/architecture/) | Идея, три слоя, структура проекта |
+| [Быстрый старт](https://arzab.github.io/gorock/architecture/getting-started) | HTTP-сервис на PostgreSQL за 10 минут |
 | [Концепты](https://arzab.github.io/gorock/architecture/concepts) | Пять принципов архитектуры |
 | [Engine](https://arzab.github.io/gorock/architecture/engine) | Запуск, lifecycle, Apps |
 | [Realm](https://arzab.github.io/gorock/architecture/realm) | Бизнес-логика, Delivery, Models |
 | [Toolkit](https://arzab.github.io/gorock/architecture/toolkit) | Services, Infra, Libs |
 | [Конфигурация](https://arzab.github.io/gorock/architecture/configs) | Конфиги как документация |
+| [gorock-kit](https://arzab.github.io/gorock/gorock-kit/) | Готовые модули: движок, конфиги, HTTP, события, расписание, PostgreSQL, Redis |
+| [Примеры](https://arzab.github.io/gorock/examples/) | [examples/taskapi](examples/taskapi) — эталонный проект |
 
 ---
 
@@ -49,5 +52,5 @@ project/
 | Репозиторий | Описание |
 |-------------|----------|
 | [arzab/gorock](https://github.com/arzab/gorock) | Архитектурный стандарт и документация |
-| [arzab/gorock-kit](https://github.com/arzab/gorock-kit) | Готовые реализации для GOROCK-проектов |
-| arzab/gorock-cli | Генератор слоёв и сущностей *(скоро)* |
+| [arzab/gorock-kit](https://github.com/arzab/gorock-kit) | Готовые реализации для GOROCK-проектов · v0.1.0 |
+| arzab/gorock-cli | Генератор слоёв и сущностей *(в разработке)* |

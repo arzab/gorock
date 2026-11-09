@@ -108,32 +108,34 @@ type Task struct {
 ```go
 // internal/models/properties/user.go
 type UserProperties struct {
-    ID           string
-    Name         string
-    Email        string
-    PasswordHash string
+    ID           string `json:"id"`
+    Name         string `json:"name"`
+    Email        string `json:"email"`
+    PasswordHash string `json:"-"`
 }
 
 // internal/models/entities/user.go
 type User struct {
+    bun.BaseModel `bun:"table:users"`
     properties.UserProperties
+
+    Password string `json:"password,omitempty" bun:"-"` // приходит от клиента, не хранится
 }
 
-// реализует интерфейс pkg/services/crud
-func (u *User) Create() error {
+// BeforeCreate — поведение самой сущности: хэширует пароль и забывает его.
+func (u *User) BeforeCreate() error {
     hash, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
     if err != nil {
         return err
     }
-    u.PasswordHash = string(hash)
+    u.PasswordHash, u.Password = string(hash), ""
     return nil
 }
-
-func (u *User) TableName() string { return "users" }
-func (u *User) Validate() error   { ... }
 ```
 
-Поведение сущности обусловлено ей самой — `User` знает как создать себя корректно. Delivery лишь решает когда вызвать `Create()`.
+Поведение сущности обусловлено ей самой — `User` знает, как подготовить себя к сохранению. Delivery лишь решает, когда вызвать `BeforeCreate()` и затем `services.Repository().Insert(ctx, user)`.
+
+Теги `bun` в entities — это реализация «интерфейса» ORM: репозиторий на [rockbun](/gorock-kit/rockbun) принимает `any` и сам читает из модели имя таблицы и колонки. Сервис по-прежнему не импортирует `internal/models`.
 
 Разделение позволяет реализовывать интерфейсы внешних библиотек в entities, не загрязняя plain-данные в properties. При смене библиотеки меняются только entities.
 

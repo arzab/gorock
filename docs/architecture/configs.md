@@ -4,330 +4,281 @@
 
 ## Концепт
 
-Configs — это документация которая всегда актуальна. Открыл один файл — увидел все слои, все зависимости, все технологии. Структура configs отражает структуру приложения. Неполный конфиг — приложение не запускается.
+Configs — это документация, которая всегда актуальна. Открыл один файл — увидел все слои, все зависимости, все технологии. Структура configs отражает структуру приложения. Неполный конфиг — приложение не запускается.
 
 ---
 
 ## Идея
 
-Каждый слой проекта объявляет свою структуру `Configs` в файле `configs.go`. Корневой `Configs` в `cmd/main` агрегирует их все. Конфигурационный файл повторяет эту иерархию — один к одному.
+Каждый слой проекта объявляет свою структуру `Configs`. Корневой `Configs` в `cmd/main` агрегирует их все. Файл конфига повторяет эту иерархию один к одному.
 
-Результат: один файл покрывает конфиги всего приложения. Глядя на него — сразу понятно что принадлежит какому слою.
+Результат: один файл покрывает конфиги всего приложения. Глядя на него, сразу понятно, что какому слою принадлежит.
+
+Загружает файл [rockconfig](/gorock-kit/rockconfig) из gorock-kit. Поддерживаются YAML и JSON; примеры ниже — на YAML.
 
 ---
 
 ## Как устроен Configs
 
-Каждый пакет объявляет свою структуру `Configs` в `configs.go`. Сгруппируем по слоям.
-
 ### Engine — `cmd/`
 
-Каждый App объявляет свой `Configs`. `cmd/configs.go` агрегирует их:
+`cmd/apps` агрегирует конфиги приложений. Готовые App из gorock-kit приносят свой конфиг:
 
 ```go
-// cmd/apps/http_server/configs.go
+// cmd/apps/apps.go
 type Configs struct {
-    Port    string `json:"port"`
-    Timeout int    `json:"timeout" config:"default:30"`
-}
-
-// cmd/apps/pubsub_consumer/configs.go
-type Configs struct {
-    SubscriptionId string `json:"subscription_id"`
-    ProjectId      string `json:"project_id"`
-}
-
-// cmd/configs.go
-type Configs struct {
-    HttpServer     http_server.Configs     `json:"http_server"`
-    PubsubConsumer pubsub_consumer.Configs `json:"pubsub_consumer"`
+    HTTP rockfiber.Config                         // port, endpoints_path_prefix, request_timeout...
+    Bus  rockbus.Config  `config:",omitempty"`     // queue_size
+    Cron rockcron.Config `config:",omitempty"`     // location
 }
 ```
 
 ### Realm — `internal/`
 
-Как правило не имеет конфигов. Delivery, models и utils не нуждаются в настройке при старте — их поведение определяется бизнес-логикой, а не конфигурационным файлом.
+Как правило, конфигов не имеет. Delivery, models и utils не нуждаются в настройке при старте — их поведение определяется бизнес-логикой, а не файлом.
 
 ### Toolkit — `pkg/`
 
-Services и infra объявляют конфиги. Libs конфигов не имеют — они не singletons:
+Services и infra объявляют конфиги. Libs конфигов не имеют — они не singletons.
 
 ```go
-// pkg/infra/logs/configs.go
+// pkg/infra/logs/logs.go
 type Configs struct {
-    Level string `json:"level" config:"default:info"`
+    Level  string `config:",default=info"`
+    Format string `config:",default=json"`
 }
 
-// pkg/infra/vars/configs.go
+// pkg/infra/infra.go
 type Configs struct {
-    Env string `json:"env" config:"default:dev"`
-}
-
-// pkg/infra/configs.go
-type Configs struct {
-    Logs logs.Configs `json:"logs"`
-    Vars vars.Configs `json:"vars"`
+    Logs logs.Configs `config:",omitempty"`
 }
 
 // pkg/services/repository/configs.go
 type Configs struct {
-    Host     string `json:"host"`
-    Port     string `json:"port"`
-    Name     string `json:"name"`
-    User     string `json:"user"`
-    Password string `json:"password"`
+    Postgres rockbun.Configs // host, port, user, password, database, пул...
 }
 
-// pkg/services/configs.go
+// pkg/services/services.go
 type Configs struct {
-    Repository repository.Configs  `json:"repository"`
-    RunManager run_manager.Configs `json:"run_manager"`
-}
-
-// pkg/configs.go
-type Configs struct {
-    Infra    infra.Configs    `json:"infra"`
-    Services services.Configs `json:"services"`
+    Repository repository.Configs
 }
 ```
-
-### infra/vars — глобальные переменные
-
-Бывают значения которые не принадлежат ни одному конкретному сервису — имя окружения, feature flags, shared-параметры. Класть их в `Configs` какого-то одного сервиса неудобно, а читать напрямую из env в произвольных местах — плохая практика.
-
-Для этого есть `pkg/infra/vars` — singleton, который хранит такие переменные и делает их доступными из любого слоя:
-
-```go
-// pkg/infra/vars/configs.go
-type Configs struct {
-    Env string `json:"env" config:"default:dev"`
-}
-
-// pkg/infra/vars/vars.go
-var (
-    Env          string
-    FeatureFlags map[string]bool
-)
-
-func Init(configs Configs) {
-    Env = configs.Env
-}
-```
-
-Использование из любого слоя:
-
-```go
-if vars.Env == "prod" {
-    // prod-specific behaviour
-}
-```
-
-В конфигурационном файле vars лежит внутри секции `infra`:
-
-```json
-{
-  "infra": {
-    "logs": { "level": "info" },
-    "vars": { "env": "$APP_ENV" }
-  }
-}
-```
-
-Разница с обычными `Configs`: vars — это не настройка конкретного компонента, а глобальное состояние доступное всем слоям без передачи аргументов.
-
----
 
 ### Корневой Configs
-
-`cmd/main` собирает конфиги всех слоёв:
 
 ```go
 // cmd/main/main.go
 type Configs struct {
-    Infra    infra.Configs    `json:"infra"`
-    Services services.Configs `json:"services"`
-    Apps     apps.Configs     `json:"apps"`
+    Infra    infra.Configs
+    Services services.Configs
+    Apps     apps.Configs
 }
 ```
 
-Конфигурационный файл повторяет эту вложенность:
+Файл повторяет эту вложенность:
 
-```json
-{
-  "infra": {
-    "logs": { "level": "info" }
-  },
-  "services": {
-    "repository": {
-      "host": "$DB_HOST",
-      "port": "5432",
-      "name": "$DB_NAME",
-      "user": "$DB_USER",
-      "password": "$DB_PASSWORD"
-    },
-    "run_manager": {
-      "script_path": "./scripts/run.py"
-    }
-  },
-  "apps": {
-    "http_server": {
-      "port": "$APP_PORT"
-    }
-  }
-}
+```yaml
+infra:
+  logs:
+    level: info
+    format: json
+
+services:
+  repository:
+    postgres:
+      host: ${DB_HOST:-localhost}
+      user: ${DB_USER:-postgres}
+      password: ${DB_PASSWORD}
+      database: ${DB_NAME:-tasks}
+
+apps:
+  http:
+    port: ${PORT:-8080}
+    endpoints_path_prefix: /api/v1
+    use_trace_id: true
+    request_timeout: 5s
+```
+
+Загрузка — одна строка:
+
+```go
+cfg, err := rockconfig.InitFromFile[Configs]("./configs/configs.yaml")
 ```
 
 ---
 
-## gorock-kit: InitFromFile
+## Имена ключей
 
-Для загрузки конфига используется готовая функция из `gorock-kit`:
+Теги `json`/`yaml` не нужны. Имя поля переводится в `snake_case`:
+
+| Поле Go | Ключ в файле |
+|---|---|
+| `Services` | `services` |
+| `RequestTimeout` | `request_timeout` |
+| `HTTPServer` | `http_server` |
+| `UserID` | `user_id` |
+
+Своё имя — первым параметром тега: `config:"public_url"`.
+
+---
+
+## Обязательные поля и теги
+
+Поле **обязательно**, если у него нет `omitempty`, `default=` или `-`. Обязательное поле должно **присутствовать** в файле — значение может быть любым, включая `0` и `false`. Обязательная строка не может быть пустой.
+
+| Тег | Поведение |
+|-----|-----------|
+| _(без тега)_ | обязательное, ключ должен быть в файле |
+| `config:",omitempty"` | необязательное |
+| `config:",default=8080"` | значение по умолчанию, если ключа нет или он пустой |
+| `config:",env=APP_SECRET"` | взять из переменной окружения, она важнее файла |
+| `config:"-"` | поле не читается из файла — задаётся в коде (функции, сложные типы) |
+| `config:"name"` | своё имя ключа |
+
+Опции комбинируются: `config:"port,default=8080"`. `default=` должен быть последней опцией.
 
 ```go
-mainConfigs, err := configs.InitFromFile[Configs](configsPath)
+type ServerConfigs struct {
+    Port    string        `config:",default=8080"`
+    Timeout time.Duration `config:",default=30s"`
+    Debug   bool          `config:",omitempty"`
+    App     fiber.Config  `config:"-"`
+}
 ```
 
-Функция принимает путь к файлу и шаблонную структуру. Поддерживает JSON и YAML.
+**Вложенные секции.** Если у секции `omitempty` и её нет в файле — её поля не проверяются. Если секция есть — её поля проверяются как обычно. Значения по умолчанию и `env=` внутри секции применяются, даже когда самой секции в файле нет.
 
-Под капотом происходит последовательно:
+**Неизвестные ключи — ошибка.** Опечатка `request_timout` не превратится молча в значение по умолчанию. Если один файл читают несколько программ — `rockconfig.InitFromFile[Configs](path, rockconfig.AllowUnknownKeys())`.
 
-1. Читает файл
-2. Подставляет env-переменные — `$VAR` и `${VAR}` заменяются значениями до парсинга
-3. Анмаршаллит в структуру `T`
-4. Валидирует все поля — по умолчанию ни одно поле не должно быть пустым
+**Длительности — только строкой с единицей:** `5s`, `1m30s`. Голое число отклоняется — иначе `timeout: 30` означало бы 30 наносекунд.
 
-Если валидация не прошла — возвращает ошибку с перечислением незаполненных полей. Приложение не запустится с неполным конфигом.
+Все проблемы приходят одной ошибкой:
+
+```
+rockconfig: ./configs/configs.yaml: missing required fields:
+  apps.http.port
+  services.repository.postgres.password (empty)
+unknown keys (typo? use rockconfig.AllowUnknownKeys() to ignore):
+  apps.http.request_timout
+```
 
 ---
 
 ## Env-переменные
 
-Подставляются до парсинга — работает для любых значений в файле:
+Строковые значения могут ссылаться на переменные окружения:
 
-```json
-{
-  "services": {
-    "repository": {
-      "host": "$DB_HOST",
-      "password": "$DB_PASSWORD"
-    }
-  }
-}
+```yaml
+password: ${DB_PASSWORD}             # ошибка, если переменная не задана
+host: ${DB_HOST:-localhost}          # значение по умолчанию
+port: ${PORT:-8080}                  # строка приводится к типу поля
+dsn: "postgres://${DB_HOST}/app"     # можно встраивать
+hash: "$2a$10$..."                   # одиночный $ остаётся как есть
 ```
 
-Если переменная не задана — подставляется пустая строка, валидация это поймает.
+Подстановка выполняется **после** разбора файла, поэтому значение переменной не может сломать структуру YAML. Незаданная переменная без `:-default` — ошибка с именем переменной и путём к полю:
+
+```
+services.repository.postgres.password: env var DB_PASSWORD is not set (use ${DB_PASSWORD:-default} for an optional value)
+```
 
 Секреты — только через env-переменные. Остальное можно вшить прямо в файл.
 
 ---
 
-## Теги
+## Глобальные переменные — infra/vars
 
-Поведение валидации можно изменить через теги на полях структуры:
-
-| Тег | Поведение |
-|-----|-----------|
-| _(без тега)_ | Поле обязательно, не может быть пустым |
-| `config:"ignore"` | Поле полностью пропускается при валидации |
-| `config:"omitempty"` | Поле не проверяется если nil или zero value |
-| `config:"default:{value}"` | Подставляет значение по умолчанию если поле пустое |
+Бывают значения, которые не принадлежат ни одному сервису, — имя окружения, feature flags. Класть их в конфиг какого-то сервиса неудобно, а читать env в произвольных местах — плохая практика. Для них есть `pkg/infra/vars`:
 
 ```go
-type ServerConfigs struct {
-    Port      string       `json:"port"    config:"default:8080"`
-    Timeout   int          `json:"timeout" config:"default:30"`
-    App       fiber.Config `json:"app"     config:"ignore"`
-    DebugMode bool         `json:"debug"   config:"omitempty"`
+// pkg/infra/vars/vars.go
+type Configs struct {
+    Env string `config:",default=dev"`
 }
+
+var cfg Configs
+
+func Init(c Configs) { cfg = c }
+func Get() Configs   { return cfg }
 ```
+
+```yaml
+infra:
+  vars:
+    env: ${APP_ENV:-dev}
+```
+
+Подробнее → [Infra](/architecture/infra).
 
 ---
 
 ## Несколько окружений
 
-Конфигурационный файл один, но окружений может быть несколько. Каждое окружение — отдельный файл:
+Файл конфига один, окружений может быть несколько. Каждое окружение — отдельный файл:
 
 ```
 configs/
-├── configs.json   — дефолт если путь не указан
-├── dev.json
-├── staging.json
-└── prod.json
+├── configs.yaml   — по умолчанию, если путь не указан
+├── dev.yaml
+└── prod.yaml
 ```
 
-Приложение не знает в каком окружении запускается — оно просто читает файл по переданному пути. Это позволяет запускать один и тот же бинарь в любом окружении без пересборки.
+Приложение не знает, в каком окружении запускается, — оно читает файл по переданному пути. Один и тот же бинарь работает в любом окружении без пересборки.
 
 ### Через позиционный аргумент
 
-Простейший вариант — путь к файлу первым аргументом:
-
 ```go
-// cmd/main/main.go
-configsPath := "./configs/configs.json"
-if len(os.Args) >= 2 {
-    configsPath = os.Args[1]
+path := "./configs/configs.yaml"
+if len(os.Args) > 1 {
+    path = os.Args[1]
 }
-
-mainConfigs, err := configs.InitFromFile[Configs](configsPath)
+cfg, err := rockconfig.InitFromFile[Configs](path)
 ```
 
 ```bash
-./app                           # → ./configs/configs.json
-./app ./configs/dev.json        # → dev.json
-./app ./configs/prod.json       # → prod.json
+./app                         # → ./configs/configs.yaml
+./app ./configs/prod.yaml     # → prod.yaml
 ```
 
-### Через именованный параметр
-
-Более явный вариант — флаг с именем:
+### Через флаг
 
 ```go
-// cmd/main/main.go
-configsPath := flag.String("config", "./configs/configs.json", "path to config file")
+path := flag.String("config", "./configs/configs.yaml", "path to config file")
 flag.Parse()
-
-mainConfigs, err := configs.InitFromFile[Configs](*configsPath)
+cfg, err := rockconfig.InitFromFile[Configs](*path)
 ```
 
 ```bash
-./app --config ./configs/dev.json
-./app --config ./configs/prod.json
+./app --config ./configs/prod.yaml
 ```
 
-Именованный параметр удобнее когда приложение принимает несколько аргументов — не нужно помнить порядок.
+Флаг удобнее, когда у приложения несколько аргументов, — не нужно помнить порядок.
 
 ### Содержимое файлов
 
-В `dev.json` значения вшиты прямо в файл. В `prod.json` — секреты через env, остальное вшито:
+В `dev.yaml` значения вшиты прямо в файл, в `prod.yaml` секреты приходят из env:
 
-```json
-// dev.json
-{
-  "services": {
-    "repository": {
-      "host": "localhost",
-      "port": "5432",
-      "name": "mydb_dev",
-      "user": "postgres",
-      "password": "postgres"
-    }
-  }
-}
+```yaml
+# dev.yaml
+services:
+  repository:
+    postgres:
+      host: localhost
+      user: postgres
+      password: postgres
+      database: tasks_dev
 ```
 
-```json
-// prod.json
-{
-  "services": {
-    "repository": {
-      "host": "$DB_HOST",
-      "port": "5432",
-      "name": "$DB_NAME",
-      "user": "$DB_USER",
-      "password": "$DB_PASSWORD"
-    }
-  }
-}
+```yaml
+# prod.yaml
+services:
+  repository:
+    postgres:
+      host: ${DB_HOST}
+      user: ${DB_USER}
+      password: ${DB_PASSWORD}
+      database: tasks
+      ssl_mode: verify-full
 ```
 
 ---
@@ -336,5 +287,6 @@ mainConfigs, err := configs.InitFromFile[Configs](*configsPath)
 
 - **Каждый пакет объявляет свой `Configs`** — не передавать конфиг родительского слоя вниз.
 - **Секреты — только через env-переменные.** Не хардкодить пароли и токены в файл.
-- **Конфиг неизменяем после загрузки.** Это настройка при старте, не состояние.
-- **Дефолты через тег `config:"default:{value}"`** — для сложной логики дефолтов используй `Init()`.
+- **Конфиг неизменяем после загрузки.** Это настройка при старте, а не состояние.
+- **Дефолты — через `config:",default=..."`**; если у поля есть дефолт в коде, пометьте его `omitempty`, иначе пользователю придётся писать его в файл.
+- **Поля, которые нельзя задать в файле** (функции, сторонние структуры), — `config:"-"`, их заполняют в коде.

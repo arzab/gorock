@@ -9,8 +9,8 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: 'Архитектура', link: '/architecture/' },
-      { text: 'Примеры', link: '/examples/' },
       { text: 'gorock-kit', link: '/gorock-kit/' },
+      { text: 'Примеры', link: '/examples/' },
       { text: 'CLI', link: '/cli/' },
     ],
 
@@ -20,6 +20,8 @@ export default defineConfig({
           text: 'Введение',
           items: [
             { text: 'Что такое GOROCK', link: '/architecture/' },
+            { text: 'Концепты', link: '/architecture/concepts' },
+            { text: 'Быстрый старт', link: '/architecture/getting-started' },
           ]
         },
         {
@@ -37,6 +39,7 @@ export default defineConfig({
             { text: 'Обзор', link: '/architecture/realm' },
             { text: 'Models', link: '/architecture/models' },
             { text: 'Delivery', link: '/architecture/delivery' },
+            { text: 'Utils', link: '/architecture/utils' },
           ]
         },
         {
@@ -61,6 +64,39 @@ export default defineConfig({
         },
       ],
 
+      '/gorock-kit/': [
+        {
+          text: 'gorock-kit',
+          items: [
+            { text: 'Введение', link: '/gorock-kit/' },
+          ]
+        },
+        {
+          text: 'Engine',
+          items: [
+            { text: 'rockengine', link: '/gorock-kit/rockengine' },
+            { text: 'rockconfig', link: '/gorock-kit/rockconfig' },
+          ]
+        },
+        {
+          text: 'Apps',
+          items: [
+            { text: 'rockfiber — HTTP', link: '/gorock-kit/rockfiber' },
+            { text: 'rockbus — события', link: '/gorock-kit/rockbus' },
+            { text: 'rockcron — расписание', link: '/gorock-kit/rockcron' },
+            { text: 'rocktelebot — Telegram', link: '/gorock-kit/rocktelebot' },
+          ]
+        },
+        {
+          text: 'Toolkit',
+          items: [
+            { text: 'rockbun — PostgreSQL', link: '/gorock-kit/rockbun' },
+            { text: 'rockredis — Redis', link: '/gorock-kit/rockredis' },
+            { text: 'rocklog — логгер', link: '/gorock-kit/rocklog' },
+          ]
+        },
+      ],
+
       '/examples/': [
         {
           text: 'Примеры',
@@ -68,15 +104,6 @@ export default defineConfig({
             { text: 'Все примеры', link: '/examples/' },
           ]
         },
-      ],
-
-      '/gorock-kit/': [
-        {
-          text: 'gorock-kit',
-          items: [
-            { text: 'Введение', link: '/gorock-kit/' },
-          ]
-        }
       ],
 
       '/cli/': [
@@ -88,6 +115,8 @@ export default defineConfig({
         }
       ],
     },
+
+    outline: { level: [2, 3], label: 'На этой странице' },
 
     socialLinks: [
       { icon: 'github', link: 'https://github.com/arzab/gorock' }

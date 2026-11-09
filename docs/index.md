@@ -7,7 +7,10 @@ hero:
   tagline: Три слоя. Чёткие правила. Одна архитектура — для любого Go-приложения.
   actions:
     - theme: brand
-      text: Начать
+      text: Быстрый старт
+      link: /architecture/getting-started
+    - theme: alt
+      text: Архитектура
       link: /architecture/
     - theme: alt
       text: GitHub
@@ -16,7 +19,7 @@ hero:
 features:
   - icon: 🗂️
     title: Понятная структура
-    details: Открываешь любой GOROCK-проект — сразу знаешь где что лежит. Никакого "а куда это положить".
+    details: Открываешь любой GOROCK-проект — сразу знаешь, где что лежит. Никакого «а куда это положить».
 
   - icon: 🧱
     title: Три слоя
@@ -24,17 +27,23 @@ features:
 
   - icon: ⚙️
     title: Для любого приложения
-    details: HTTP-сервер, consumer, worker, loader, CLI — структура не меняется. GOROCK не привязан к транспорту.
+    details: HTTP-сервер, consumer, worker, планировщик, бот — структура не меняется. GOROCK не привязан к транспорту.
 
   - icon: 📦
     title: gorock-kit
-    details: Готовые решения для типовых задач — HTTP-сервер на Fiber, загрузка конфигов с подстановкой env, парсинг параметров, стандартные ответы, логгер. Берёшь и используешь, не пишешь с нуля.
+    details: Готовый код для того, что в каждом проекте одинаковое — движок с graceful shutdown, загрузка конфигов с env, логгер, HTTP-сервер на Fiber, шина событий, планировщик, PostgreSQL и Redis.
     link: /gorock-kit/
-    linkText: Подробнее
+    linkText: Модули
+
+  - icon: 🧪
+    title: Рабочий пример
+    details: Эталонный проект на gorock-kit — HTTP, PostgreSQL, события и расписание. Код в документации взят из него.
+    link: /examples/
+    linkText: Примеры
 
   - icon: ⚡
-    title: CLI
-    details: Генерация слоёв, сервисов и endpoints одной командой. Не тратишь время на создание файлов и шаблонный код — фокусируешься на логике.
+    title: CLI — в разработке
+    details: Генерация слоёв, сервисов и endpoints одной командой. Пока — шаблоны в документации.
     link: /cli/
     linkText: Подробнее
 ---

@@ -9,30 +9,29 @@
 ```
 project/
 ├── cmd/
-│   ├── main/                   — точка входа, инициализация, lifecycle
+│   ├── main/
+│   │   └── main.go             — Configs, загрузка конфига, регистрация в движке, Run
 │   └── apps/
-│       ├── main.go             — Configs, Init, Exec
-│       ├── interface.go        — интерфейс App
-│       ├── http_server/        — HTTP-сервер
-│       └── pubsub_consumer/    — consumer
+│       ├── apps.go             — Configs всех apps + Register
+│       └── queue_consumer/     — свой App, если готового нет
 │
 ├── internal/
 │   ├── delivery/
-│   │   ├── endpoints/          — HTTP handlers
-│   │   ├── consumers/          — consumer handlers
-│   │   └── events/             — eventbus handlers
+│   │   ├── endpoints/          — HTTP endpoints (rockfiber)
+│   │   ├── events/             — обработчики событий (rockbus)
+│   │   └── jobs/               — задачи по расписанию (rockcron)
 │   ├── models/                 — сущности предметной области
 │   └── utils/                  — вспомогательные функции
 │
 ├── pkg/
-│   ├── services/               — singleton-обёртки над внешними системами
-│   ├── infra/                  — логирование, трейсинг, eventbus, vars
-│   └── libs/                   — переиспользуемые строительные блоки
+│   ├── services/               — singleton-обёртки над внешними системами (ресурсы движка)
+│   ├── infra/                  — логгер, трейсер, vars
+│   └── libs/                   — ваш переиспользуемый код
 │
 ├── configs/
-│   ├── configs.json
-│   ├── dev.json
-│   └── prod.json
+│   ├── configs.yaml
+│   ├── dev.yaml
+│   └── prod.yaml
 │
 ├── migrations/                 — допустимо
 ├── scripts/                    — допустимо
@@ -54,11 +53,21 @@ App (Engine)           принимает запрос, передаёт в Deli
   ↓
 Delivery (Realm)       выполняет бизнес-логику, вызывает Services
   ↓
-Services (Toolkit)     работает с технологией — БД, очередь, API
+Services (Toolkit)     работает с технологией — БД, кэш, API
   ↓
 Ответ
   ↑
 App                    получает результат, переводит на язык протокола
+```
+
+При запуске и остановке:
+
+```
+infra.Init → [движок] services Init → apps Init → apps Exec
+                                                     ↓
+                                               [сигнал ОС]
+                                                     ↓
+                     services Stop ← apps Stop (по одному, в обратном порядке)
 ```
 
 ---
@@ -73,12 +82,22 @@ App                    получает результат, переводит �
 
 ---
 
+## Где что взять в gorock-kit
+
+| Слой | Модули |
+|---|---|
+| Engine | [rockengine](/gorock-kit/rockengine), [rockfiber](/gorock-kit/rockfiber), [rockbus](/gorock-kit/rockbus), [rockcron](/gorock-kit/rockcron), [rocktelebot](/gorock-kit/rocktelebot) |
+| Configs | [rockconfig](/gorock-kit/rockconfig) |
+| Toolkit | [rockbun](/gorock-kit/rockbun), [rockredis](/gorock-kit/rockredis), [rocklog](/gorock-kit/rocklog) |
+
+---
+
 ## Куда положить код
 
-Когда не знаешь куда положить код — ответь на три вопроса:
+Когда не знаешь, куда положить код, — ответь на вопросы:
 
 1. **Это обёртка над внешней технологией?** → `pkg/services`
 2. **Это инструмент самого проекта** (логгер, трейсер)? → `pkg/infra`
-3. **Это бизнес-логика — что делать при запросе?** → `internal/delivery`
+3. **Это бизнес-логика — что делать при запросе или событии?** → `internal/delivery`
 4. **Это структура данных проекта?** → `internal/models`
-5. **Это запуск или оркестрация?** → `cmd/`
+5. **Это запуск, транспорт или оркестрация?** → `cmd/`
