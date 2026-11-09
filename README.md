@@ -47,6 +47,19 @@ project/
 
 ---
 
+## Для ИИ-агентов
+
+Плагин для Claude Code — skill `gorock:service` создаёт проект и добавляет код по правилам GOROCK на актуальном API gorock-kit:
+
+```sh
+claude plugin marketplace add arzab/gorock
+claude plugin install gorock@gorock
+```
+
+Для Codex, Cursor и других агентов — [`AGENTS.md`](plugin/skills/service/templates/AGENTS.md) в корень проекта. Подробнее — [Для ИИ-агентов](https://arzab.github.io/gorock/ai/).
+
+---
+
 ## Экосистема
 
 | Репозиторий | Описание |

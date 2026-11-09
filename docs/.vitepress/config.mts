@@ -11,6 +11,7 @@ export default defineConfig({
       { text: 'Архитектура', link: '/architecture/' },
       { text: 'gorock-kit', link: '/gorock-kit/' },
       { text: 'Примеры', link: '/examples/' },
+      { text: 'Для ИИ', link: '/ai/' },
       { text: 'CLI', link: '/cli/' },
     ],
 
@@ -102,6 +103,15 @@ export default defineConfig({
           text: 'Примеры',
           items: [
             { text: 'Все примеры', link: '/examples/' },
+          ]
+        },
+      ],
+
+      '/ai/': [
+        {
+          text: 'Для ИИ-агентов',
+          items: [
+            { text: 'Плагин и AGENTS.md', link: '/ai/' },
           ]
         },
       ],

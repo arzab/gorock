@@ -1,0 +1,12 @@
+infra:
+  logs:
+    level: info
+    format: json
+
+apps:
+  http:
+    port: ${PORT:-8080}
+    endpoints_path_prefix: /api/v1
+    use_trace_id: true
+    request_timeout: 5s
+    mask_internal_server_error_message: internal server error

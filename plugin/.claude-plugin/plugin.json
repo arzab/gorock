@@ -1,0 +1,14 @@
+{
+  "name": "gorock",
+  "displayName": "GOROCK",
+  "version": "0.2.0",
+  "description": "Build Go services with the GOROCK architecture and gorock-kit: scaffold a project, add endpoints, services, events, jobs and apps the right way.",
+  "author": {
+    "name": "arzab",
+    "url": "https://github.com/arzab"
+  },
+  "homepage": "https://arzab.github.io/gorock/",
+  "repository": "https://github.com/arzab/gorock",
+  "license": "MIT",
+  "keywords": ["go", "golang", "architecture", "gorock", "gorock-kit", "fiber", "backend"]
+}

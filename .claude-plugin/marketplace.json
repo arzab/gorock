@@ -1,0 +1,15 @@
+{
+  "name": "gorock",
+  "description": "GOROCK — Go architecture standard and gorock-kit",
+  "owner": {
+    "name": "arzab",
+    "url": "https://github.com/arzab"
+  },
+  "plugins": [
+    {
+      "name": "gorock",
+      "source": "./plugin",
+      "description": "Build Go services with the GOROCK architecture and gorock-kit"
+    }
+  ]
+}
