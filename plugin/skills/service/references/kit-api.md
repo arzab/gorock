@@ -1,4 +1,4 @@
-# GOROCK API (compact): gorock-kit v0.4.x core + gorock-catalog
+# GOROCK API (compact): gorock-kit v0.5.x core + gorock-catalog v0.5.x
 
 Core: `github.com/arzab/gorock-kit/<module>` — rockengine, rockconfig, rockservices, rockhandlers. Modules don't import each other.
 Catalog: `github.com/arzab/gorock-catalog/<module>` — rockhttp (on rockhandlers) and the modules moved as-is from kit v0.2.0 (rocklog, rockfiber, rockbus, rockcron, rocktelebot, rockbun, rockredis). Go 1.26+.
@@ -39,16 +39,19 @@ Tags: `config:"name"`, `config:",omitempty"`, `config:",default=8080"` (must be 
 ## rockservices — services catalog
 
 ```go
-type Service interface { Init(ctx context.Context) error; Stop() error } // no Name(): the name belongs to the registration
+type Service interface { Init(ctx context.Context) error; Stop() error } // no Name(): the name is the key
 
-rockservices.Add(c, name, ctor func(C) S, cfg C) S // calls ctor now; panics on empty/duplicate name, nil, ctor panic, Add after Init
-rockservices.Get[S](name) S                        // from the default catalog; panics on unknown name / wrong type
-rockservices.Init(ctx) error                       // in Add order; on failure closes the opened ones in reverse
-rockservices.Stop() error                          // reverse order, joins errors, idempotent, timeout 30s names the hanging one
-rockservices.Default() *Catalog; rockservices.New() *Catalog; c.WithStopTimeout(d); rockservices.GetFrom[S](c, name)
-prev := rockservices.SetDefault(c)                 // tests only
+var Orders = rockservices.NewKey[orders.Service]("orders") // typed key, declared once in pkg/services/services.go
+rockservices.Add(c, Orders, ctor func(C) S, cfg C) S     // ctor type checked against the key at compile time; returns the service
+Orders.Get() S; Orders.From(c) S; Orders.Name()          // Get reads the default catalog
+rockservices.Init(ctx) error   // default catalog: fails naming declared-but-not-added keys; then Init in Add order, closes opened ones on failure
+rockservices.Stop() error      // reverse order, joins errors, idempotent, timeout 30s names the hanging one
+rockservices.ErrAlreadyStarted // second Init
+rockservices.Default() *Catalog; rockservices.New() *Catalog; c.WithStopTimeout(d)
+prev := rockservices.SetDefault(c) // tests only; no t.Parallel() in such tests
 ```
-`pkg/services/services.go` holds the name constants (`const OrdersName = "orders"`), `Configs`, `Register(c, cfg)` and the getters (`func Orders() orders.Service { return rockservices.Get[orders.Service](OrdersName) }`). cmd/main: `services.Register(rockservices.Default(), cfg.Services)` → `rockservices.Init(ctx)` → `defer rockservices.Stop()` → `engine.Run()`. Shared dependency: register it first and pass it through a closure in `Register`. Two instances = two `Add` calls with two names. The logger is a service registered first.
+Panics: nil key, empty or duplicate name (also two keys with one name), nil service, ctor panic, Add after Init, `Get` of a service missing from the catalog.
+Shared dependency: `pg := rockservices.Add(c, Postgres, postgres.NewService, cfg.Postgres)` then `rockservices.Add(c, Orders, func(cfg orders.Configs) orders.Service { return orders.NewService(cfg, pg) }, cfg.Orders)` — never `key.Get()` inside a constructor (it reads `Default()`). Two instances = two keys. The logger is a service added first.
 
 ## rockhandlers — transport-independent request handling
 
@@ -56,6 +59,7 @@ prev := rockservices.SetDefault(c)                 // tests only
 type Handler[P, R any] func(c *Ctx[P, R]) error         // P, R: pointer-to-struct types
 // *Ctx[P, R] is a context.Context; fields Params P (filled by the transport), Result R (pre-allocated)
 c.Next() error; c.Route() string; c.Base(); c.SetContext(ctx)
+rockhandlers.Done // return it to end the chain early with success; never leaves Serve/Run
 
 route := rockhandlers.Chain("tasks.create", steps...)   // Route (generics erased); P, R inferred; generic steps instantiated
 route = route.With(mws...)                              // first = outermost; later With wraps earlier
@@ -72,7 +76,7 @@ rockhandlers.MessageOf(err) // "" for Internal; FieldsOf(err); *PanicError{Value
 res, err := rockhandlers.Run[*Result](ctx, route, &Params{...})   // tests: whole chain without a transport
 // transports: result, err := route.Serve(ctx, func(params any) error { /* decode into params */ })
 ```
-Order: middlewares → transport decoding (fill) → `Params.Validate()` → steps. A step that doesn't call `Next` ends the chain (early success is fine). On error the Result is dropped. Panics anywhere → Internal. Reusable steps needing request data are generic with an interface constraint (`func Bearer[P TokenParams, R any](c *rockhandlers.Ctx[P, R]) error`); models satisfy it by embedding (`steps.BearerAuth`). Short alias: `type Ctx = rockhandlers.Ctx[*Params, *Result]`.
+Order: middlewares → transport decoding (fill) → `Params.Validate()` → steps. A link that returns nil without calling `Next` continues the chain automatically; `return rockhandlers.Done` ends it early with success. A plain error from `fill` reaches the client as Invalid "invalid request" (the cause stays for logs). On error the Result is dropped. Panics anywhere → Internal. Reusable steps needing request data are generic with an interface constraint (`func Bearer[P TokenParams, R any](c *rockhandlers.Ctx[P, R]) error`); models satisfy it by embedding (`steps.BearerAuth`). Short alias: `type Ctx = rockhandlers.Ctx[*Params, *Result]`.
 
 # Catalog (gorock-catalog)
 

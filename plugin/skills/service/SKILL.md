@@ -17,17 +17,18 @@ A GOROCK project is one scheme: `[client] ⇄ App ⇄ Handlers ⇄ Services ⇄ 
 
 ## Workflow
 
-1. **Orient.** Read `go.mod` and `AGENTS.md`. Kit `v0.4.x` = current model (services named at registration). `v0.3.x` = services have `Name()`. `v0.2.x` = old model (resources in the engine, rockfiber endpoints, `internal/delivery`, `pkg/infra`) — keep its style unless asked to migrate.
+1. **Orient.** Read `go.mod` and `AGENTS.md`. Kit `v0.5.x` = current model: services by typed keys (`rockservices.NewKey`), a step that returns nil continues the chain, `rockhandlers.Done` ends it early. `v0.4.x` = string service names (`Add(c, "name", …)`, `Get[S](name)`) and a step without `Next` ends the chain. `v0.3.x` = services have `Name()`. `v0.2.x` = old model (resources in the engine, rockfiber endpoints, `internal/delivery`, `pkg/infra`) — keep the project's style unless asked to migrate.
    - No project yet → scaffold (recipe 1). Don't hand-write the skeleton.
    - Existing project without `AGENTS.md` → copy `${CLAUDE_SKILL_DIR}/templates/AGENTS.md` to the root and offer `CLAUDE.md` containing `@AGENTS.md`.
 2. **Pick the recipe** in [references/recipes.md](references/recipes.md) and follow it file by file. Exact signatures: [references/kit-api.md](references/kit-api.md) — don't guess APIs.
-3. **Wire it up.** Every new piece is reachable from exactly one place: service → `services.Register` + name constant + getter; handler → `cmd/apps/http.go` (or another App's binding); App → `apps.Register`. Config field → layer `Configs` **and** `configs/*.yaml`.
+3. **Wire it up.** Every new piece is reachable from exactly one place: service → key in `services.go` + `Add` in `services.Register` (a declared but not added key fails startup); handler → `cmd/apps/http.go` (or another App's binding); App → `apps.Register`. Config field → layer `Configs` **and** `configs/*.yaml`.
 4. **Verify.** `gofmt -l .` prints nothing; `go build ./... && go vet ./...`; `go test ./...` (handlers via `rockhandlers.Run`). If config or wiring changed, run `go run ./cmd/main` and confirm it gets past config loading and service Init.
 5. **Report** what was added and where, and what the user must provide (env vars, DB schema, tokens).
 
 ## Rules that are easy to get wrong
 
-- Services: `Service` = `Init(ctx) error` + `Stop() error` — **no `Name()`**; `rockservices.Add(c, Name, NewService, cfg)`; constructors open no connections; getters live in `services.go`.
+- Services: `Service` = `Init(ctx) error` + `Stop() error` — **no `Name()`**. Keys in `services.go`: `var Orders = rockservices.NewKey[orders.Service]("orders")`; `rockservices.Add(c, Orders, orders.NewService, cfg.Orders)`; use `services.Orders.Get()`. Wire a shared dependency with the value `Add` returned, never `key.Get()` inside a constructor. Constructors open no connections.
+- Steps: returning `nil` continues the chain (no `c.Next()` needed); end early with success via `return rockhandlers.Done`. Never `return nil` to stop the chain.
 - Handlers never return HTTP codes or write responses; errors are `rockhandlers.Invalid/Unauthorized/Forbidden/NotFound/Conflict/Unavailable(...)`; plain errors become hidden 500s. Pass `c` (a context.Context) to services. `Validate()` on Params runs first.
 - Shared steps that need request data are generic with an interface constraint; Params satisfy it by embedding (`steps.BearerAuth`). Never type-assert Params. Middlewares only for logic that doesn't read Params.
 - Method, path and status live in `cmd/apps/http.go`, never in a handler. `Status` is optional (default 200).
@@ -35,7 +36,7 @@ A GOROCK project is one scheme: `[client] ⇄ App ⇄ Handlers ⇄ Services ⇄ 
 - Config: no `json` tags; required unless `omitempty` / `default=` / `-`; `${VAR}` or `${VAR:-x}`; durations as `5s`; unknown keys are errors. No `os.Getenv` in code.
 - Log with `rocklog` (configured by the logger service, registered first); never `Fatal`/`log.Fatal` outside `main()`.
 - `pkg/` never imports `internal/`; `internal/handlers` never imports `cmd/`.
-- Removed/old API that must not appear in v0.4 projects: `Name()` on services, `RegisterResource`, `rockengine.Resource`, `rockdelivery`, `internal/delivery`, `pkg/infra`, `github.com/arzab/gorock-kit/rockfiber` (and other non-core kit paths), `configs.InitFromFile`, `config:"default:X"`, `pkg/libs/go-kit`, `logrus`.
+- Removed/old API that must not appear in v0.5 projects: string service names (`rockservices.Add(c, "name", …)`, `rockservices.Get[S](name)`, `GetFrom`, name constants with getter functions), early exit via `return nil`, `Name()` on services, `RegisterResource`, `rockengine.Resource`, `rockdelivery`, `internal/delivery`, `pkg/infra`, `github.com/arzab/gorock-kit/rockfiber` (and other non-core kit paths), `configs.InitFromFile`, `config:"default:X"`, `pkg/libs/go-kit`, `logrus`.
 
 ## Resources
 

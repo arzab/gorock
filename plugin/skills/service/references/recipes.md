@@ -97,15 +97,14 @@ func (s *service) GetByID(ctx context.Context, order any, id string) error {
 }
 ```
 
-`pkg/services/services.go` — the name constant, the `Configs` field, the registration (after the logger) and a getter:
+`pkg/services/services.go` — the key, the `Configs` field and the registration (after the logger):
 ```go
-const OrdersName = "orders"
+var Orders = rockservices.NewKey[orders.Service]("orders") // in the var block with the other keys
 
 // in Configs:  Orders orders.Configs
-// in Register: rockservices.Add(c, OrdersName, orders.NewService, cfg.Orders)
-
-func Orders() orders.Service { return rockservices.Get[orders.Service](OrdersName) }
+// in Register: rockservices.Add(c, Orders, orders.NewService, cfg.Orders)
 ```
+Use it anywhere: `services.Orders.Get().Insert(ctx, order)`. A key declared but not added fails `rockservices.Init` at startup.
 
 Config: `services.orders.postgres: {host: ${DB_HOST:-localhost}, user: ${DB_USER:-postgres}, password: ${DB_PASSWORD}, database: ${DB_NAME:-app}}`.
 Model in `internal/models/`: `bun.BaseModel \`bun:"table:orders" json:"-"\`` + `bun:"id,pk"` tags.
@@ -116,12 +115,13 @@ Same three files + registration. Examples:
 - **Redis cache** (`rockredis`): `type service struct{ r rockredis.Service }`, `NewService(cfg) Service { return &service{r: rockredis.NewService(cfg.Redis)} }`, `Init`/`Stop` delegate; methods like `Get(ctx, key) (string, bool, error)` (map `rockredis.ErrNil` to `false`).
 - **External API**: hold an `*http.Client` and base URL from `Configs`; `Init` may ping the API; methods are what the project needs (`Charge(ctx, amount) (id string, err error)`).
 - **Logic** (file parsing, PDF): no connections — `Init` and `Stop` return nil.
-- **Shared dependency** (one pool used by several services): register it first and pass it through a closure:
+- **Shared dependency** (one pool used by several services): register it first and pass the value `Add` returned:
   ```go
-  rockservices.Add(c, PostgresName, postgres.NewService, cfg.Postgres)
-  rockservices.Add(c, OrdersName, func(cfg orders.Configs) orders.Service { return orders.NewService(cfg, Postgres()) }, cfg.Orders)
+  pg := rockservices.Add(c, Postgres, postgres.NewService, cfg.Postgres)
+  rockservices.Add(c, Orders, func(cfg orders.Configs) orders.Service { return orders.NewService(cfg, pg) }, cfg.Orders)
   ```
-- **Two instances** of one service: two `Add` calls with two names.
+  Never call `key.Get()` inside a constructor: it reads `Default()`, not the catalog being filled.
+- **Two instances** of one service: two keys (`NewKey[postgres.Service]("orders_db")`, `…("analytics_db")`) and two `Add` calls.
 
 ## 4. Handler + mount it on HTTP
 
@@ -171,7 +171,7 @@ var Create = rockhandlers.Chain("orders.create", steps.Bearer, create)
 
 func create(c *CreateCtx) error {
 	order := &models.Order{ID: uuid.NewString(), Owner: steps.UserKey.MustGet(c), Item: c.Params.Item, Qty: c.Params.Qty}
-	if err := services.Orders().Insert(c, order); err != nil { // c is a context.Context
+	if err := services.Orders.Get().Insert(c, order); err != nil { // c is a context.Context
 		return fmt.Errorf("insert order: %w", err) // → Internal, message hidden
 	}
 	c.Result.Order = order
@@ -186,7 +186,7 @@ func create(c *CreateCtx) error {
 
 - Params tags: `json` (body), `header`, `path` (pattern `{id}`), `query`, `form` (`*multipart.FileHeader` for uploads). Embedded structs are bound.
 - Errors are kinds: `rockhandlers.Invalid` 400, `Unauthorized` 401, `Forbidden` 403, `NotFound` 404, `Conflict` 409, `Unavailable` 503; plain errors and panics → 500 with a hidden message. Map service errors where the decision is: `if errors.Is(err, orderssvc.ErrNotFound) { return rockhandlers.NotFound("order not found") }`.
-- Multi-step: `rockhandlers.Chain("orders.update", steps.Bearer, load, checkOwner, update)`; each step calls `c.Next()`; data between steps via `rockhandlers.NewLocal[T](name)`.
+- Multi-step: `rockhandlers.Chain("orders.update", steps.Bearer, load, checkOwner, update)`; a step that returns nil passes control on (`c.Next()` is optional — call it to run code after the rest); `return rockhandlers.Done` ends early with success (e.g. a cache hit) — never `return nil` for that; data between steps via `rockhandlers.NewLocal[T](name)`.
 - No body: result `struct{}` → 204. Files `*rockhttp.File`, redirects `*rockhttp.Redirect`, cookies `rockhttp.SetCookie(c, …)`.
 - `Status` is optional (default 200); the `/api/v1` prefix comes from `apps.http.prefix`.
 
@@ -322,7 +322,7 @@ if err := rockservices.Init(ctx); err != nil {
 	return err
 }
 defer rockservices.Stop()
-return runMigrations(ctx, services.Orders())
+return runMigrations(ctx, services.Orders.Get())
 ```
 
 ## 11. Tests
@@ -338,7 +338,7 @@ func (f *fakeOrders) GetByID(context.Context, any, string) error { return orders
 
 func TestCreate(t *testing.T) {
 	c := rockservices.New()
-	rockservices.Add(c, services.OrdersName, func(struct{}) orderssvc.Service { return &fakeOrders{} }, struct{}{})
+	rockservices.Add(c, services.Orders, func(struct{}) orderssvc.Service { return &fakeOrders{} }, struct{}{})
 	prev := rockservices.SetDefault(c)
 	t.Cleanup(func() { rockservices.SetDefault(prev) })
 
@@ -349,4 +349,5 @@ func TestCreate(t *testing.T) {
 	}
 }
 ```
+Tests that swap the default catalog must not use `t.Parallel()`. Full example: https://github.com/arzab/gorock/tree/main/examples/taskapi/internal/handlers/tasks
 HTTP level: `app := rockhttp.New(cfg, httpEndpoints()...)`, `app.Init(ctx)`, then `httptest` against `app.Handler()`.
