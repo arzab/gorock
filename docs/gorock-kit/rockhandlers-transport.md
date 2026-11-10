@@ -61,10 +61,11 @@ type Consumer struct {
 - ошибки разбора видят middleware (логирование, метрики) — отдельный канал отчётов не нужен;
 - `Timeout` покрывает и разбор;
 - паника в `fill` становится `Internal`, а не роняет процесс;
-- если контекст уже отменён или middleware не вызвал `Next`, `fill` не выполнится.
+- если контекст уже отменён или middleware вернул ошибку или `rockhandlers.Done`, `fill` не выполнится.
 
 **Ошибки.**
-- Простая `error` из `fill` становится `Invalid`, **и её текст увидит клиент.** Возвращайте понятный текст без внутренних подробностей: `query "page": "x" is not an integer`.
+- Простая `error` из `fill` становится `Invalid` с общим сообщением «invalid request», а её текст остаётся в причине — для логов. Это безопасно, но расплывчато.
+- Чтобы сказать клиенту точнее, верните `*rockhandlers.Error` с понятным текстом без имён Go-типов и структур: `rockhandlers.Invalid("invalid JSON body")` или `rockhandlers.Invalid("invalid query").WithFields(map[string]string{"page": "must be a number"})`.
 - Чтобы задать вид и сообщение самому, верните `*rockhandlers.Error`: например, `rockhandlers.Unauthorized("bad signature")` при проверке подписи вебхука.
 - Ошибку ввода-вывода тела, если ничего нельзя сказать клиенту, оберните в `*rockhandlers.Error` с видом `KindInternal` — текст будет скрыт.
 
