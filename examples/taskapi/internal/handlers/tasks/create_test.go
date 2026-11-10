@@ -13,19 +13,20 @@ import (
 func TestCreate(t *testing.T) {
 	fake := useFake(t)
 
-	res, err := rockhandlers.Run[*tasks.CreateResult](context.Background(), tasks.Create, &tasks.CreateParams{Title: " write docs "})
+	res, err := tasks.Create.Call(context.Background(), &tasks.CreateParams{Title: " write docs "})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Task.Title != "write docs" || fake.tasks[res.Task.ID] == nil {
-		t.Fatalf("result %+v, stored %v", res.Task, fake.tasks)
+	task := res.(*tasks.CreateResponse).Task
+	if task.Title != "write docs" || fake.tasks[task.ID] == nil {
+		t.Fatalf("result %+v, stored %v", task, fake.tasks)
 	}
 }
 
 func TestCreateEmptyTitle(t *testing.T) {
 	useFake(t)
 
-	_, err := rockhandlers.Run[*tasks.CreateResult](context.Background(), tasks.Create, &tasks.CreateParams{Title: "  "})
+	_, err := tasks.Create.Call(context.Background(), &tasks.CreateParams{Title: "  "})
 	if rockhandlers.KindOf(err) != rockhandlers.KindInvalid || rockhandlers.FieldsOf(err)["title"] != "required" {
 		t.Fatalf("err = %v, fields %v", err, rockhandlers.FieldsOf(err))
 	}
@@ -35,7 +36,7 @@ func TestCreateRepositoryFailure(t *testing.T) {
 	fake := useFake(t)
 	fake.err = errors.New("connection refused to 10.0.0.5:5432")
 
-	_, err := rockhandlers.Run[*tasks.CreateResult](context.Background(), tasks.Create, &tasks.CreateParams{Title: "x"})
+	_, err := tasks.Create.Call(context.Background(), &tasks.CreateParams{Title: "x"})
 	if rockhandlers.KindOf(err) != rockhandlers.KindInternal {
 		t.Fatalf("kind = %v", rockhandlers.KindOf(err))
 	}

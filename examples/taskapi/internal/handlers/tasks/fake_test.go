@@ -41,14 +41,13 @@ func (f *fakeRepository) GetByID(_ context.Context, model any, id string) error 
 	return nil
 }
 
-// useFake makes a catalog with the fake the default one for this test.
-// Tests that swap the default catalog must not use t.Parallel().
+// useFake swaps the services catalog for one with the fake repository.
+// Tests that swap the catalog must not use t.Parallel().
 func useFake(t *testing.T) *fakeRepository {
 	t.Helper()
 	fake := &fakeRepository{tasks: map[string]*models.Task{}}
-	c := rockservices.New()
-	rockservices.Add(c, services.Repository, func(struct{}) repository.Service { return fake }, struct{}{})
-	prev := rockservices.SetDefault(c)
-	t.Cleanup(func() { rockservices.SetDefault(prev) })
+	t.Cleanup(services.UseCatalog(rockservices.New(map[string]rockservices.Service{
+		services.RepositoryName: fake,
+	})))
 	return fake
 }
