@@ -3,47 +3,47 @@ layout: home
 
 hero:
   name: GOROCK
-  text: Стандарт структуры Go-проекта
-  tagline: Три слоя. Чёткие правила. Одна архитектура — для любого Go-приложения.
+  text: Шаблон Go-проекта
+  tagline: Сервисы, обработчики, App, сборка и настройки — у каждого слоя одна задача. Бизнес-логика пишется один раз и работает в HTTP, очереди и по расписанию.
   actions:
     - theme: brand
-      text: Быстрый старт
-      link: /architecture/getting-started
-    - theme: alt
       text: Архитектура
       link: /architecture/
+    - theme: alt
+      text: Быстрый старт
+      link: /guide/getting-started
     - theme: alt
       text: GitHub
       link: https://github.com/arzab/gorock
 
 features:
-  - icon: 🗂️
-    title: Понятная структура
-    details: Открываешь любой GOROCK-проект — сразу знаешь, где что лежит. Никакого «а куда это положить».
+  - icon: 🧭
+    title: Один шаблон для любого проекта
+    details: HTTP-API, consumer очереди, бот, задачи по расписанию — устройство одно. Пришёл в новый GOROCK-проект — уже знаешь, где искать.
+    link: /architecture/
+    linkText: Архитектура
 
-  - icon: 🧱
-    title: Три слоя
-    details: Engine запускает, Realm содержит бизнес-логику, Toolkit — переиспользуемый инструментарий. Каждый слой знает своё место.
+  - icon: 🔁
+    title: Бизнес не знает транспорт
+    details: Обработчик получает параметры и возвращает результат или ошибку. HTTP, очередь и cron вызывают один и тот же обработчик, а тест — просто вызов функции.
+    link: /guide/handlers
+    linkText: Как писать Handler
 
-  - icon: ⚙️
-    title: Для любого приложения
-    details: HTTP-сервер, consumer, worker, планировщик, бот — структура не меняется. GOROCK не привязан к транспорту.
+  - icon: 🧰
+    title: Сервисы по имени
+    details: База, кэш, внешние API, логгер — сервисы в одном каталоге. Открываются до запуска App, закрываются после, берутся по имени откуда угодно.
+    link: /guide/services
+    linkText: Как писать Service
 
   - icon: 📦
-    title: gorock-kit
-    details: Ядро для того, что в каждом проекте одинаковое — движок apps с graceful shutdown, конфиги с env, слой сервисов и обработка запросов без привязки к транспорту. HTTP, PostgreSQL, Redis, логгер и остальное — в каталоге.
+    title: Ядро и каталог
+    details: gorock-kit делает одинаковую для всех часть — движок App, строгий конфиг, каталог сервисов, обработчики. Каталог даёт готовые HTTP, PostgreSQL, Redis и другие модули.
     link: /gorock-kit/
-    linkText: Ядро и каталог
+    linkText: Модули
 
-  - icon: 🧪
-    title: Рабочий пример
-    details: Проект на gorock-kit — HTTP, PostgreSQL, события и расписание.
-    link: /examples/
-    linkText: Примеры
-
-  - icon: ⚡
-    title: CLI — в разработке
-    details: Генерация слоёв, сервисов и endpoints одной командой. Пока — шаблоны в документации.
-    link: /cli/
+  - icon: 🤖
+    title: Для ИИ-агентов
+    details: Плагин Claude Code и AGENTS.md учат агента писать код по правилам GOROCK на актуальном API.
+    link: /ai/
     linkText: Подробнее
 ---

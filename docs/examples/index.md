@@ -5,7 +5,7 @@
 ---
 
 ::: warning Примеры ещё на модели gorock-kit v0.2.0
-`taskapi` написан на gorock-kit `v0.2.0`: сервисы — ресурсы движка, HTTP — на Fiber (`rockfiber`), endpoints — цепочки `fiber.Handler`. В ядре v0.3.0 этого больше нет: сервисы — отдельный слой [rockservices](/gorock-kit/rockservices), обработка запросов — [rockhandlers](/gorock-kit/rockhandlers), HTTP — [rockhttp](/catalog/rockhttp). Код новой модели — в [Быстром старте](/architecture/getting-started); пример будет переведён на неё.
+`taskapi` написан на gorock-kit `v0.2.0`: сервисы — ресурсы движка, HTTP — на Fiber (`rockfiber`), endpoints — цепочки `fiber.Handler`. В текущем ядре этого больше нет: сервисы — [rockservices](/gorock-kit/rockservices), обработчики — [rockhandlers](/gorock-kit/rockhandlers), HTTP — [rockhttp](/catalog/rockhttp). Проект на текущей модели — в [Быстром старте](/guide/getting-started); пример будет переведён на неё.
 :::
 
 ## taskapi — HTTP-сервис на PostgreSQL

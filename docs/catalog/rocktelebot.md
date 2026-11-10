@@ -2,12 +2,12 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rocktelebot/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Engine · Apps
-Telegram-бот — App в `cmd/apps`. Команды и обработчики описываются в `internal/delivery`. → [Apps](/architecture/apps)
+::: tip Место в GOROCK · App
+Telegram-бот — App в `cmd/apps`. → [Как писать App](/guide/apps)
 :::
 
 ::: warning Перенесён из gorock-kit v0.2.0 как есть
-Код и API — те же, что были в `github.com/arzab/gorock-kit/rocktelebot@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rocktelebot`. Модуль ещё не переведён на новое ядро: обработчики пока не на rockhandlers.
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rocktelebot@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rocktelebot`. Модуль ещё не переведён на новое ядро: его обработчики — не обработчики rockhandlers.
 :::
 
 ```sh

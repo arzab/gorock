@@ -2,8 +2,8 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockengine/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Engine
-Сердце `cmd/main`: запускает и останавливает **apps** — HTTP, шину событий, планировщик. Сервисы — отдельный слой, его поднимает [rockservices](./rockservices) до движка. Контракт `App` — это интерфейс слоя Apps. → [Main](/architecture/main), [Apps](/architecture/apps)
+::: tip Место в GOROCK · Main · движок App
+Движок, которым Main запускает и останавливает **App**: по порядку, с перезапуском упавших и остановкой по одному в обратном порядке. Сервисы — не его забота, их открывает и закрывает [rockservices](./rockservices). → [Main](/guide/main), [Как писать App](/guide/apps)
 :::
 
 ```sh

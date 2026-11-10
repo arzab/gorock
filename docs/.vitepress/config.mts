@@ -2,80 +2,61 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'GOROCK',
-  description: 'Стандарт структуры Go-проекта',
+  description: 'Шаблон Go-проекта',
   lang: 'ru-RU',
   base: '/gorock/',
 
   themeConfig: {
     nav: [
       { text: 'Архитектура', link: '/architecture/' },
+      { text: 'Руководство', link: '/guide/getting-started' },
       { text: 'gorock-kit', link: '/gorock-kit/' },
       { text: 'Каталог', link: '/catalog/' },
-      { text: 'Примеры', link: '/examples/' },
       { text: 'Для ИИ', link: '/ai/' },
-      { text: 'CLI', link: '/cli/' },
     ],
 
     sidebar: {
       '/architecture/': [
         {
-          text: 'Введение',
+          text: 'Архитектура',
           items: [
-            { text: 'Что такое GOROCK', link: '/architecture/' },
-            { text: 'Концепты', link: '/architecture/concepts' },
-            { text: 'Быстрый старт', link: '/architecture/getting-started' },
-          ]
-        },
-        {
-          text: 'Toolkit',
-          items: [
-            { text: 'Обзор', link: '/architecture/toolkit' },
-            { text: 'Services', link: '/architecture/services' },
-            { text: 'Infra', link: '/architecture/infra' },
-            { text: 'Libs', link: '/architecture/libs' },
-          ]
-        },
-        {
-          text: 'Realm',
-          items: [
-            { text: 'Обзор', link: '/architecture/realm' },
-            { text: 'Models', link: '/architecture/models' },
-            { text: 'Delivery', link: '/architecture/delivery' },
-            { text: 'Utils', link: '/architecture/utils' },
-          ]
-        },
-        {
-          text: 'Engine',
-          items: [
-            { text: 'Обзор', link: '/architecture/engine' },
-            { text: 'Main', link: '/architecture/main' },
-            { text: 'Apps', link: '/architecture/apps' },
-          ]
-        },
-        {
-          text: 'Конфигурация',
-          items: [
-            { text: 'Configs', link: '/architecture/configs' },
-          ]
-        },
-        {
-          text: 'Итог',
-          items: [
-            { text: 'Итог', link: '/architecture/summary' },
+            { text: 'Архитектура', link: '/architecture/' },
+            { text: 'Быстрый старт', link: '/guide/getting-started' },
           ]
         },
       ],
-
+      '/guide/': [
+        {
+          text: 'Руководство',
+          items: [
+            { text: 'Быстрый старт', link: '/guide/getting-started' },
+            { text: 'Как писать Service', link: '/guide/services' },
+            { text: 'Как писать Handler', link: '/guide/handlers' },
+            { text: 'Как писать App', link: '/guide/apps' },
+            { text: 'Main', link: '/guide/main' },
+            { text: 'Как писать Config', link: '/guide/configs' },
+            { text: 'Models и libs', link: '/guide/models' },
+          ]
+        },
+        {
+          text: 'Дальше',
+          items: [
+            { text: 'Как написать свой App', link: '/gorock-kit/rockhandlers-transport' },
+            { text: 'Примеры', link: '/examples/' },
+            { text: 'CLI', link: '/cli/' },
+          ]
+        },
+      ],
       '/gorock-kit/': [
         {
           text: 'gorock-kit — ядро',
           items: [
             { text: 'Введение', link: '/gorock-kit/' },
-            { text: 'rockengine — apps', link: '/gorock-kit/rockengine' },
+            { text: 'rockengine — движок App', link: '/gorock-kit/rockengine' },
             { text: 'rockconfig — конфиг', link: '/gorock-kit/rockconfig' },
             { text: 'rockservices — сервисы', link: '/gorock-kit/rockservices' },
-            { text: 'rockhandlers — обработка запросов', link: '/gorock-kit/rockhandlers' },
-            { text: 'Как написать транспорт', link: '/gorock-kit/rockhandlers-transport' },
+            { text: 'rockhandlers — обработчики', link: '/gorock-kit/rockhandlers' },
+            { text: 'Как написать свой App', link: '/gorock-kit/rockhandlers-transport' },
           ]
         },
       ],

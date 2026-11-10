@@ -1,44 +1,133 @@
 # Recipes
 
-Each recipe lists every file to touch. `MODULE` is the module path from `go.mod`. After any recipe: `gofmt -w`, `go build ./... && go vet ./...`, and start the service once if config changed.
+Each recipe lists every file to touch. `MODULE` is the module path from `go.mod`. After any recipe: `gofmt -w`, `go build ./... && go vet ./...`, `go test ./...`, and start the project once if config changed.
 
-Core = `github.com/arzab/gorock-kit/<module>` (rockengine, rockconfig, rockservices, rockhandlers). Catalog = `github.com/arzab/gorock-catalog/<module>` (rockhttp, rocklog, rockbun, rockredis, rockbus, rockcron, rocktelebot, rockfiber).
+Layers (bottom-up): **Services** (`pkg/services/`) → **Handlers** (`internal/handlers/`) → **App** (`cmd/apps/`) → **Main** (`cmd/main/`) → **Config** (`configs/`).
+Core: `github.com/arzab/gorock-kit/<module>` (rockservices, rockhandlers, rockengine, rockconfig). Catalog: `github.com/arzab/gorock-catalog/<module>` (rockhttp, rocklog, rockbun, rockredis, rockbus, rockcron, rocktelebot, rockfiber).
 
 ## Contents
 1. New project
-2. HTTP endpoint (route + endpoint)
-3. Reusable step (auth, tenant…) and groups
-4. Middleware (logging, metrics, timeouts)
-5. PostgreSQL repository (service)
-6. Redis cache service
-7. Events (rockbus)
-8. Scheduled jobs (rockcron)
-9. Telegram bot (rocktelebot)
-10. Custom App (queue consumer, gRPC…)
-11. Config field / new environment
-12. Short-running command (migrations, CLI)
-13. Tests
+2. Service (PostgreSQL repository)
+3. Service over another technology (Redis, external API) or logic
+4. Handler + mount it on HTTP
+5. Shared step (auth) and groups
+6. Middleware (logging, metrics, timeouts)
+7. Custom App (queue consumer, gRPC…)
+8. Events (rockbus) and scheduled jobs (rockcron)
+9. Config field / new environment
+10. One-shot command (migrations, CLI)
+11. Tests
 
 ---
 
 ## 1. New project
-
-Run the scaffold script, then build:
 
 ```sh
 bash "${CLAUDE_SKILL_DIR}/scripts/scaffold.sh" github.com/acme/orders ./orders
 cd orders && go run ./cmd/main   # GET localhost:8080/api/v1/hello?name=Ann
 ```
 
-The script copies `templates/skeleton/` (layers, services catalog, engine, rockhttp app, logger, log middleware, one route, config, AGENTS.md, CLAUDE.md), sets the module path, runs `go get` for the core and catalog modules and `go build`. If the target dir is not empty, it refuses — then create files by hand from `templates/skeleton/`.
+The script copies `templates/skeleton/` (services catalog with the logger service, a `hello` handler, the log middleware, the HTTP App with `http.go`, Main, config, AGENTS.md, CLAUDE.md), sets the module path, runs `go get` for core + catalog modules and builds. If the target dir is not empty it refuses — then create files by hand from `templates/skeleton/`.
 
-## 2. HTTP endpoint (route + endpoint)
+## 2. Service (PostgreSQL repository)
 
-A **route** is a rockhandlers chain — it knows nothing about HTTP. The **endpoint** (method, path, status) mounts it in rockhttp.
+`go get github.com/arzab/gorock-catalog/rockbun@latest`
 
-`internal/delivery/endpoints/create_order/route.go`
+`pkg/services/orders/configs.go`
 ```go
-package create_order
+package orders
+
+import "github.com/arzab/gorock-catalog/rockbun"
+
+type Configs struct {
+	Postgres rockbun.Configs
+}
+```
+
+`pkg/services/orders/interface.go`
+```go
+package orders
+
+import (
+	"context"
+	"errors"
+
+	"github.com/arzab/gorock-kit/rockservices"
+)
+
+var ErrNotFound = errors.New("orders: not found") // handlers check it with errors.Is
+
+type Service interface {
+	rockservices.Service // Init + Stop
+	Insert(ctx context.Context, order any) error
+	GetByID(ctx context.Context, order any, id string) error
+}
+```
+
+`pkg/services/orders/service.go`
+```go
+package orders
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+
+	"github.com/arzab/gorock-catalog/rockbun"
+)
+
+type service struct{ db rockbun.Service } // child service: orders owns it
+
+func NewService(cfg Configs) Service { return &service{db: rockbun.NewService(cfg.Postgres)} } // no connections here
+
+func (s *service) Init(ctx context.Context) error { return s.db.Init(ctx) }
+func (s *service) Stop() error                    { return s.db.Stop() }
+
+func (s *service) Insert(ctx context.Context, order any) error {
+	_, err := s.db.DB().NewInsert().Model(order).Exec(ctx)
+	return err
+}
+
+func (s *service) GetByID(ctx context.Context, order any, id string) error {
+	err := s.db.DB().NewSelect().Model(order).Where("id = ?", id).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
+}
+```
+
+`pkg/services/services.go` — the name constant, the `Configs` field, the registration (after the logger) and a getter:
+```go
+const OrdersName = "orders"
+
+// in Configs:  Orders orders.Configs
+// in Register: rockservices.Add(c, OrdersName, orders.NewService, cfg.Orders)
+
+func Orders() orders.Service { return rockservices.Get[orders.Service](OrdersName) }
+```
+
+Config: `services.orders.postgres: {host: ${DB_HOST:-localhost}, user: ${DB_USER:-postgres}, password: ${DB_PASSWORD}, database: ${DB_NAME:-app}}`.
+Model in `internal/models/`: `bun.BaseModel \`bun:"table:orders" json:"-"\`` + `bun:"id,pk"` tags.
+
+## 3. Service over another technology or logic
+
+Same three files + registration. Examples:
+- **Redis cache** (`rockredis`): `type service struct{ r rockredis.Service }`, `NewService(cfg) Service { return &service{r: rockredis.NewService(cfg.Redis)} }`, `Init`/`Stop` delegate; methods like `Get(ctx, key) (string, bool, error)` (map `rockredis.ErrNil` to `false`).
+- **External API**: hold an `*http.Client` and base URL from `Configs`; `Init` may ping the API; methods are what the project needs (`Charge(ctx, amount) (id string, err error)`).
+- **Logic** (file parsing, PDF): no connections — `Init` and `Stop` return nil.
+- **Shared dependency** (one pool used by several services): register it first and pass it through a closure:
+  ```go
+  rockservices.Add(c, PostgresName, postgres.NewService, cfg.Postgres)
+  rockservices.Add(c, OrdersName, func(cfg orders.Configs) orders.Service { return orders.NewService(cfg, Postgres()) }, cfg.Orders)
+  ```
+- **Two instances** of one service: two `Add` calls with two names.
+
+## 4. Handler + mount it on HTTP
+
+`internal/handlers/orders/create.go`
+```go
+package orders
 
 import (
 	"fmt"
@@ -47,19 +136,18 @@ import (
 	"github.com/arzab/gorock-kit/rockhandlers"
 	"github.com/google/uuid"
 
+	"MODULE/internal/handlers/steps"
 	"MODULE/internal/models"
-	"MODULE/pkg/services/repository"
+	"MODULE/pkg/services"
 )
 
-type Params struct {
-	ShopID string `path:"shop"`       // from the path pattern /shops/{shop}/orders
-	DryRun bool   `query:"dry_run"`   // ?dry_run=true
-	Item   string `json:"item"`       // JSON body
-	Qty    int    `json:"qty"`
+type CreateParams struct {
+	steps.BearerAuth        // the token, for the Bearer step (recipe 5)
+	Item             string `json:"item"`
+	Qty              int    `json:"qty"`
 }
 
-// Validate runs right after decoding, before every step.
-func (p *Params) Validate() error {
+func (p *CreateParams) Validate() error { // runs before every step
 	fields := map[string]string{}
 	if strings.TrimSpace(p.Item) == "" {
 		fields["item"] = "required"
@@ -68,47 +156,43 @@ func (p *Params) Validate() error {
 		fields["qty"] = "must be > 0"
 	}
 	if len(fields) > 0 {
-		return rockhandlers.Invalid("invalid order").WithFields(fields) // → 400 with "fields"
+		return rockhandlers.Invalid("invalid order").WithFields(fields)
 	}
 	return nil
 }
 
-type Result struct {
+type CreateResult struct {
 	Order *models.Order `json:"order"`
 }
 
-type Ctx = rockhandlers.Ctx[*Params, *Result]
+type CreateCtx = rockhandlers.Ctx[*CreateParams, *CreateResult]
 
-var Route = rockhandlers.Chain("orders.create", create)
+var Create = rockhandlers.Chain("orders.create", steps.Bearer, create)
 
-func create(c *Ctx) error {
-	order := &models.Order{ID: uuid.NewString(), ShopID: c.Params.ShopID, Item: c.Params.Item, Qty: c.Params.Qty}
-	if !c.Params.DryRun {
-		if err := repository.Get().Insert(c, order); err != nil { // c is a context.Context
-			return fmt.Errorf("insert order: %w", err) // → 500, message hidden
-		}
+func create(c *CreateCtx) error {
+	order := &models.Order{ID: uuid.NewString(), Owner: steps.UserKey.MustGet(c), Item: c.Params.Item, Qty: c.Params.Qty}
+	if err := services.Orders().Insert(c, order); err != nil { // c is a context.Context
+		return fmt.Errorf("insert order: %w", err) // → Internal, message hidden
 	}
 	c.Result.Order = order
 	return nil
 }
 ```
 
-`internal/delivery/endpoints/endpoints.go` — add the endpoint:
+`cmd/apps/http.go` — add the endpoint:
 ```go
-{Method: http.MethodPost, Path: "/shops/{shop}/orders", Handler: create_order.Route, Status: http.StatusCreated},
+{Method: http.MethodPost, Path: "/orders", Handler: orders.Create, Status: http.StatusCreated},
 ```
 
-- Business errors: `rockhandlers.NotFound("order not found")` → 404, `Conflict` → 409, `Unauthorized` → 401, `Forbidden` → 403, `Unavailable` → 503. Plain errors/panics → 500 with a hidden message.
-- Multi-step routes: `rockhandlers.Chain("orders.update", load, checkOwner, update)`; each step calls `c.Next()`; pass data with Locals (`var OrderKey = rockhandlers.NewLocal[*models.Order]("order")`).
-- No body: result type `struct{}` → 204. Files: result `*rockhttp.File`; redirect: `*rockhttp.Redirect`; cookies/headers: `rockhttp.SetCookie(c, ...)`, `rockhttp.SetHeader(c, ...)`.
-- Uploads: `File *multipart.FileHeader \`form:"file"\``.
-- The `/api/v1` prefix comes from config (`apps.http.prefix`), not from the endpoint.
+- Params tags: `json` (body), `header`, `path` (pattern `{id}`), `query`, `form` (`*multipart.FileHeader` for uploads). Embedded structs are bound.
+- Errors are kinds: `rockhandlers.Invalid` 400, `Unauthorized` 401, `Forbidden` 403, `NotFound` 404, `Conflict` 409, `Unavailable` 503; plain errors and panics → 500 with a hidden message. Map service errors where the decision is: `if errors.Is(err, orderssvc.ErrNotFound) { return rockhandlers.NotFound("order not found") }`.
+- Multi-step: `rockhandlers.Chain("orders.update", steps.Bearer, load, checkOwner, update)`; each step calls `c.Next()`; data between steps via `rockhandlers.NewLocal[T](name)`.
+- No body: result `struct{}` → 204. Files `*rockhttp.File`, redirects `*rockhttp.Redirect`, cookies `rockhttp.SetCookie(c, …)`.
+- `Status` is optional (default 200); the `/api/v1` prefix comes from `apps.http.prefix`.
 
-## 3. Reusable step and groups
+## 5. Shared step (auth) and groups
 
-A step that needs request data declares it with an interface constraint; models satisfy it by embedding. No casts.
-
-`internal/delivery/steps/auth.go`
+`internal/handlers/steps/auth.go`
 ```go
 package steps
 
@@ -129,274 +213,34 @@ type TokenParams interface{ BearerToken() string }
 var UserKey = rockhandlers.NewLocal[string]("user")
 
 func Bearer[P TokenParams, R any](c *rockhandlers.Ctx[P, R]) error {
-	user, err := verify(c, c.Params.BearerToken())
-	if err != nil {
+	user, ok := verify(c.Params.BearerToken())
+	if !ok {
 		return rockhandlers.Unauthorized("invalid token")
 	}
 	UserKey.Set(c, user)
 	return c.Next()
 }
+```
 
-// Secured is a group: a plain generic function that prepends shared steps.
-func Secured[P TokenParams, R any](name string, s ...rockhandlers.Handler[P, R]) rockhandlers.Route {
-	return rockhandlers.Chain(name, rockhandlers.Prepend(s, Bearer[P, R])...)
+Use: embed `steps.BearerAuth` in the Params, put `steps.Bearer` in the chain. Forgetting the embed is a compile error — never type-assert Params. Group = plain generic function:
+```go
+func Secured[P steps.TokenParams, R any](name string, s ...rockhandlers.Handler[P, R]) rockhandlers.Route {
+	return rockhandlers.Chain(name, rockhandlers.Prepend(s, steps.Bearer[P, R])...)
 }
 ```
 
-Use: embed `steps.BearerAuth` in `Params`, then `var Route = steps.Secured("orders.create", create)` or `rockhandlers.Chain("orders.create", steps.Bearer, create)`. Forgetting the embed is a compile error. Read the user in later steps with `steps.UserKey.MustGet(c)`.
+## 6. Middleware
 
-## 4. Middleware
+Only for logic that doesn't read Params. `internal/handlers/middleware/<name>.go`, signature `func(c rockhandlers.Context) error` that calls `c.Next()` (see the skeleton's `log.go`). App-wide: `rockhttp.New(cfg.HTTP, httpEndpoints()...).Use(middleware.Log, middleware.Metrics)`. One handler: `Create.With(rockhandlers.Timeout(2*time.Second))`. Decoding errors pass through middlewares too.
 
-For logic that doesn't look at request data. `internal/delivery/middleware/<name>.go`:
-```go
-func Log(c rockhandlers.Context) error {
-	err := c.Next()
-	if err != nil {
-		rocklog.Error("request failed", rocklog.Str("route", c.Route()), rocklog.Str("kind", rockhandlers.KindOf(err).String()), rocklog.Err(err))
-	}
-	return err
-}
-```
-App-wide: `rockhttp.New(cfg.HTTP, endpoints.All()...).Use(middleware.Log)`. One route: `Route.With(rockhandlers.Timeout(2*time.Second))`. Decoding errors also pass through middlewares.
+## 7. Custom App (queue consumer, gRPC…)
 
-## 5. PostgreSQL repository (service)
-
-`go get github.com/arzab/gorock-catalog/rockbun@latest github.com/arzab/gorock-kit/rockservices@latest`
-
-`pkg/services/repository/configs.go`
-```go
-package repository
-
-import "github.com/arzab/gorock-catalog/rockbun"
-
-type Configs struct {
-	Postgres rockbun.Configs
-}
-```
-
-`pkg/services/repository/interface.go`
-```go
-package repository
-
-import (
-	"context"
-	"errors"
-
-	"github.com/arzab/gorock-kit/rockservices"
-)
-
-const Name = "repository"
-
-var ErrNotFound = errors.New("repository: not found")
-
-type Service interface {
-	rockservices.Service
-	Ping(ctx context.Context) error
-	Insert(ctx context.Context, model any) error
-	GetByID(ctx context.Context, model any, id string) error
-	Update(ctx context.Context, model any) error
-}
-
-func Get() Service { return rockservices.Get[Service](Name) }
-```
-
-`pkg/services/repository/service.go`
-```go
-package repository
-
-import (
-	"context"
-	"database/sql"
-	"errors"
-
-	"github.com/arzab/gorock-catalog/rockbun"
-)
-
-type service struct{ db rockbun.Service } // child service: repository owns it
-
-func NewService(cfg Configs) Service { return &service{db: rockbun.NewService(cfg.Postgres)} } // no connections here
-
-func (s *service) Name() string                    { return Name }
-func (s *service) Init(ctx context.Context) error { return s.db.Init(ctx) }
-func (s *service) Stop() error                    { return s.db.Stop() }
-func (s *service) Ping(ctx context.Context) error { return s.db.Ping(ctx) }
-
-func (s *service) Insert(ctx context.Context, model any) error {
-	_, err := s.db.DB().NewInsert().Model(model).Exec(ctx)
-	return err
-}
-
-func (s *service) GetByID(ctx context.Context, model any, id string) error {
-	err := s.db.DB().NewSelect().Model(model).Where("id = ?", id).Scan(ctx)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrNotFound
-	}
-	return err
-}
-
-func (s *service) Update(ctx context.Context, model any) error {
-	res, err := s.db.DB().NewUpdate().Model(model).WherePK().Exec(ctx)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-```
-
-`pkg/services/services.go` — `Repository repository.Configs` in `Configs`, and in `Register`: `rockservices.Add(c, repository.NewService, cfg.Repository)`.
-Config: `services.repository.postgres: {host: ${DB_HOST:-localhost}, user: ${DB_USER:-postgres}, password: ${DB_PASSWORD}, database: ${DB_NAME:-app}}`.
-Model (`internal/models`): `bun.BaseModel \`bun:"table:orders"\`` + `bun:"id,pk"` tags. In delivery: `repository.Get().GetByID(c, c.Result, id)`; map `repository.ErrNotFound` to `rockhandlers.NotFound(...)`.
-
-## 6. Redis cache service
-
-`go get github.com/arzab/gorock-catalog/rockredis@latest`
-
-`pkg/services/cache/` — `configs.go`: `type Configs struct { Redis rockredis.Configs }`; `interface.go`: `const Name = "cache"`, `Service` embedding `rockservices.Service` plus `Get(ctx, key) (string, bool, error)`, `Set(ctx, key, value, ttl) error`, and `func Get() Service`; `service.go`:
+Only when the catalog has no App for the technology. `cmd/apps/<name>/configs.go` + `app.go`. The App writes only the protocol part — validation, panics and middlewares come from the handler chain.
 
 ```go
-type service struct{ r rockredis.Service }
-
-func NewService(cfg Configs) Service { return &service{r: rockredis.NewService(cfg.Redis)} }
-
-func (s *service) Name() string                    { return Name }
-func (s *service) Init(ctx context.Context) error { return s.r.Init(ctx) }
-func (s *service) Stop() error                    { return s.r.Stop() }
-
-func (s *service) Get(ctx context.Context, key string) (string, bool, error) {
-	v, err := s.r.Get(ctx, key)
-	if errors.Is(err, rockredis.ErrNil) {
-		return "", false, nil
-	}
-	return v, err == nil, err
-}
-
-func (s *service) Set(ctx context.Context, key, value string, ttl time.Duration) error {
-	return s.r.Set(ctx, key, value, ttl)
-}
-```
-Add in `services.Register`: `rockservices.Add(c, cache.NewService, cfg.Cache)`; config `services.cache.redis.addr: ${REDIS_ADDR:-localhost:6379}`.
-
-## 7. Events (rockbus)
-
-`go get github.com/arzab/gorock-catalog/rockbus@latest` — not on rockhandlers yet; its handlers are `func(ctx) error`.
-
-`internal/delivery/events/events.go`
-```go
-package events
-
-import (
-	"context"
-
-	"github.com/arzab/gorock-catalog/rockbus"
-	"github.com/arzab/gorock-catalog/rocklog"
-
-	"MODULE/internal/models"
-)
-
-const OrderCreated rockbus.Topic = "order.created"
-
-func Subscriptions() []rockbus.Subscription {
-	return []rockbus.Subscription{rockbus.On(OrderCreated, onOrderCreated)}
-}
-
-func onOrderCreated(ctx context.Context) error {
-	order, err := rockbus.Payload[models.Order](ctx)
-	if err != nil {
-		return err
-	}
-	rocklog.FromContext(ctx).Info("order created", rocklog.Str("id", order.ID))
-	return nil
-}
-```
-
-`cmd/apps/apps.go` — add `Bus rockbus.Config \`config:",omitempty"\`` to `Configs`, and in `Register` **before** the HTTP app:
-```go
-bus := rockbus.NewApp(cfg.Bus, func(ctx context.Context, ev rockbus.Event, err error) {
-	rocklog.FromContext(ctx).Error("event failed", rocklog.Str("topic", string(ev.Topic)), rocklog.Err(err))
-}, events.Subscriptions()...)
-rockbus.SetDefault(bus)
-e.MustRegister("bus", bus)
-```
-Publish from a route step: `rockbus.PublishAsync(c, rockbus.Event{Topic: events.OrderCreated, Payload: *order})`.
-
-## 8. Scheduled jobs (rockcron)
-
-`go get github.com/arzab/gorock-catalog/rockcron@latest`
-
-`internal/delivery/jobs/jobs.go`
-```go
-package jobs
-
-import (
-	"context"
-	"time"
-
-	"github.com/arzab/gorock-catalog/rockcron"
-
-	"MODULE/pkg/services/repository"
-)
-
-func All() []rockcron.Job {
-	return []rockcron.Job{
-		rockcron.Every("ping-db", time.Minute, func(ctx context.Context) error { return repository.Get().Ping(ctx) }),
-		// rockcron.Cron("daily-report", "0 3 * * *", buildReport, sendReport),
-	}
-}
-```
-
-`cmd/apps/apps.go` — `Cron rockcron.Config \`config:",omitempty"\`` in `Configs`, and before the HTTP app:
-```go
-e.MustRegister("cron", rockcron.NewApp(cfg.Cron, func(ctx context.Context, job rockcron.Job, err error) {
-	rocklog.Error("job failed", rocklog.Str("job", rockcron.JobName(job)), rocklog.Err(err))
-}, jobs.All()...))
-```
-Optional config: `apps.cron.location: Europe/Moscow` (default UTC).
-
-## 9. Telegram bot (rocktelebot)
-
-`go get github.com/arzab/gorock-catalog/rocktelebot@latest gopkg.in/telebot.v3@latest`
-
-`internal/delivery/bot/bot.go`
-```go
-package bot
-
-import (
-	"github.com/arzab/gorock-catalog/rocktelebot"
-	tele "gopkg.in/telebot.v3"
-)
-
-func Handlers() []rocktelebot.Handler {
-	return []rocktelebot.Handler{
-		rocktelebot.Command("/start", onStart).WithDesc("Start the bot"),
-		rocktelebot.GetHandler(tele.OnText, onText),
-	}
-}
-
-func onStart(c tele.Context) error { return c.Send("Hi!") }
-func onText(c tele.Context) error  { return c.Send("echo: " + c.Text()) }
-```
-
-`cmd/apps/apps.go` — `Bot rocktelebot.Config` in `Configs`, and:
-```go
-e.MustRegister("bot", rocktelebot.NewApp(cfg.Bot, []tele.MiddlewareFunc{
-	rocktelebot.Recovery(func(c tele.Context, r interface{}) { rocklog.Error("bot panic", rocklog.Any("panic", r)) }),
-}, bot.Handlers()...))
-```
-Config: `apps.bot.token: ${TELEGRAM_TOKEN}`. `Init` calls the Telegram API — a wrong token fails startup.
-
-## 10. Custom App (queue consumer, gRPC…)
-
-Only when no catalog app fits. With rockhandlers the App writes only the protocol part: decode into `Params` and map the result / error kind. `cmd/apps/<name>/configs.go` + `app.go`:
-
-```go
-package queue_consumer
-
 type Consumer struct {
 	Queue   string
-	Handler rockhandlers.Route // the same routes HTTP uses
+	Handler rockhandlers.Route // the same handlers HTTP uses
 }
 
 type App struct {
@@ -424,7 +268,7 @@ func (a *App) Exec(ctx context.Context) error {
 	for {
 		msg, err := a.conn.Receive(ctx) // returns when ctx is cancelled
 		if err != nil {
-			return err // after ctx cancel the engine treats it as a clean stop
+			return err // after ctx cancel this is a clean stop
 		}
 		a.handle(ctx, msg)
 	}
@@ -440,57 +284,69 @@ func (a *App) handle(ctx context.Context, msg *queue.Message) {
 	case rockhandlers.KindUnavailable, rockhandlers.KindInternal, rockhandlers.KindCanceled, rockhandlers.KindTimeout:
 		msg.Requeue()
 	default:
-		msg.Reject() // bad message: retrying won't help → DLQ
+		msg.Reject() // bad message: retrying won't help
 	}
 }
 
-// Stop must not wait for Exec: it is also called when Exec never ran.
-func (a *App) Stop() []error {
+func (a *App) Stop() []error { // must not wait for Exec: it is also called when Exec never ran
 	if a.conn == nil || a.started.Load() {
 		return nil
 	}
 	return []error{a.conn.Close()}
 }
 ```
-`queue` is your queue client. Register in `apps.Register` before the HTTP app: `e.MustRegister("consumer", queue_consumer.NewApp(cfg.Consumer, queue_consumer.Consumer{Queue: "orders.create", Handler: create_order.Route}))`. Panics, validation and middlewares come from rockhandlers — don't re-implement them.
+Register in `apps.Register` before HTTP. Full checklist: https://arzab.github.io/gorock/gorock-kit/rockhandlers-transport
 
-## 11. Config field / new environment
+## 8. Events (rockbus) and scheduled jobs (rockcron)
 
-1. Add the field to the right layer's `Configs` (snake_case key is derived). Optional → `config:",omitempty"` or `config:",default=X"`; secret → env reference in the file; set-in-code only → `config:"-"`.
+These catalog Apps are not on rockhandlers yet: their handlers are `func(ctx) error`.
+- **rockbus**: `internal/handlers/events/events.go` with `const OrderCreated rockbus.Topic = "order.created"` and `func Subscriptions() []rockbus.Subscription { return []rockbus.Subscription{rockbus.On(OrderCreated, onOrderCreated)} }`; in `apps.Register` before HTTP: `bus := rockbus.NewApp(cfg.Bus, onBusError, events.Subscriptions()...); rockbus.SetDefault(bus); e.MustRegister("bus", bus)`. Publish from a step: `rockbus.PublishAsync(c, rockbus.Event{Topic: events.OrderCreated, Payload: *order})`.
+- **rockcron**: `internal/handlers/jobs/jobs.go` with `func All() []rockcron.Job { return []rockcron.Job{rockcron.Every("cleanup", time.Hour, cleanup)} }`; register `rockcron.NewApp(cfg.Cron, onJobError, jobs.All()...)` before HTTP. Config `apps.cron.location`.
+
+## 9. Config field / new environment
+
+1. Add the field to the right `Configs` (snake_case key is derived). Optional → `config:",omitempty"` or `config:",default=X"`; secret → `${VAR}` in the file; set in code only → `config:"-"`.
 2. Add the key to `configs/configs.yaml` and every other `configs/*.yaml`.
-3. Start the service once: rockconfig lists missing fields and unknown keys together.
+3. Start the project once: rockconfig lists missing fields and unknown keys together.
 
-New environment: copy `configs/configs.yaml` to `configs/prod.yaml`, put secrets as `${VAR}`, run `./app ./configs/prod.yaml`.
+New environment: copy `configs/configs.yaml` to `configs/prod.yaml`, secrets as `${VAR}`, run `./app ./configs/prod.yaml`.
 
-## 12. Short-running command
+## 10. One-shot command
 
 The engine waits for a signal even after apps finish, so one-shot tasks don't use it. `cmd/migrate/main.go`:
 ```go
-cfg, err := rockconfig.InitFromFile[Configs](path) // reuse the same Configs type or a smaller one
+cfg, err := rockconfig.InitFromFile[Configs](path)
 // ...
 services.Register(rockservices.Default(), cfg.Services)
 if err := rockservices.Init(ctx); err != nil {
 	return err
 }
 defer rockservices.Stop()
-return runMigrations(ctx, repository.Get())
+return runMigrations(ctx, services.Orders())
 ```
 
-## 13. Tests
+## 11. Tests
 
-Route without HTTP, with fake services:
+Handler without HTTP, with a fake service:
 ```go
-func TestCreateOrder(t *testing.T) {
+type fakeOrders struct{ inserted []any }
+
+func (f *fakeOrders) Init(context.Context) error                 { return nil }
+func (f *fakeOrders) Stop() error                                { return nil }
+func (f *fakeOrders) Insert(_ context.Context, o any) error      { f.inserted = append(f.inserted, o); return nil }
+func (f *fakeOrders) GetByID(context.Context, any, string) error { return orderssvc.ErrNotFound }
+
+func TestCreate(t *testing.T) {
 	c := rockservices.New()
-	rockservices.Add(c, func(struct{}) repository.Service { return &fakeRepo{} }, struct{}{})
+	rockservices.Add(c, services.OrdersName, func(struct{}) orderssvc.Service { return &fakeOrders{} }, struct{}{})
 	prev := rockservices.SetDefault(c)
 	t.Cleanup(func() { rockservices.SetDefault(prev) })
 
-	res, err := rockhandlers.Run[*create_order.Result](context.Background(), create_order.Route,
-		&create_order.Params{ShopID: "s1", Item: "tea", Qty: 1})
-	if err != nil || res.Order.Item != "tea" {
+	res, err := rockhandlers.Run[*orders.CreateResult](context.Background(), orders.Create,
+		&orders.CreateParams{BearerAuth: steps.BearerAuth{Authorization: "Bearer ann"}, Item: "tea", Qty: 2})
+	if err != nil || res.Order.Owner != "ann" {
 		t.Fatalf("res %+v, err %v", res, err)
 	}
 }
 ```
-HTTP level: `app := rockhttp.New(cfg, endpoints.All()...)`, `app.Init(ctx)`, then `httptest` against `app.Handler()`.
+HTTP level: `app := rockhttp.New(cfg, httpEndpoints()...)`, `app.Init(ctx)`, then `httptest` against `app.Handler()`.

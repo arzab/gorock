@@ -2,8 +2,8 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockconfig/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Configs
-Загружает единый файл конфига в агрегированный `Configs` в `cmd/main`. Каждый слой объявляет свой `Configs`, rockconfig проверяет их все разом. → [Конфигурация](/architecture/configs)
+::: tip Место в GOROCK · Config
+Загружает единый файл настроек в `Configs` Main и проверяет его целиком при старте. → [Как писать Config](/guide/configs)
 :::
 
 ```sh

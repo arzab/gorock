@@ -2,12 +2,12 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rocklog/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Infra
-Глобальный логгер проекта. `pkg/infra/logs` переводит настройки из файла в `rocklog.Init`, дальше все слои пишут через `rocklog`. → [Infra](/architecture/infra)
+::: tip Место в GOROCK · Services · логгер
+Логгер проекта на `log/slog`. Настраивается сервисом-логгером, который регистрируется в каталоге первым; дальше все пишут через `rocklog.Info`, `rocklog.FromContext(ctx)`. → [Как писать Service](/guide/services#логгер-тоже-сервис)
 :::
 
 ::: warning Перенесён из gorock-kit v0.2.0 как есть
-Код и API — те же, что были в `github.com/arzab/gorock-kit/rocklog@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rocklog`. Модуль ещё не переведён на новое ядро: логгер — инфраструктура, а не сервис; его API не меняется.
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rocklog@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rocklog`. Модуль ещё не переведён на новое ядро: API не меняется; в README ниже логгер настраивается из `pkg/infra` — теперь это `Init` сервиса-логгера.
 :::
 
 ```sh

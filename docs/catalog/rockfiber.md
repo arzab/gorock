@@ -2,12 +2,12 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockfiber/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Engine · Apps
-HTTP App на Fiber v2 со своей моделью endpoints (`fiber.Handler`, `DefaultHandler`, `NewError`). → [Apps](/architecture/apps)
+::: tip Место в GOROCK · App
+HTTP App на Fiber v2 со своей моделью endpoints (`fiber.Handler`, `DefaultHandler`, `NewError`). → [Как писать App](/guide/apps)
 :::
 
 ::: warning Перенесён из gorock-kit v0.2.0 как есть
-Код и API — те же, что были в `github.com/arzab/gorock-kit/rockfiber@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockfiber`. Модуль ещё не переведён на новое ядро: для новых сервисов берите [rockhttp](./rockhttp) на [rockhandlers](/gorock-kit/rockhandlers).
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rockfiber@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockfiber`. Модуль ещё не переведён на новое ядро: его endpoints — не обработчики rockhandlers; для новых проектов берите [rockhttp](./rockhttp).
 :::
 
 ```sh

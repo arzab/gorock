@@ -2,7 +2,7 @@
 
 # GOROCK
 
-**Прагматичная Go-архитектура**
+**Шаблон Go-проекта**
 
 Go минималистичен. Бэкенд шаблонен. GOROCK соединяет эти две идеи — даёт стандарт там где он нужен, и оставляет свободу там где она важна.
 
@@ -15,17 +15,20 @@ Go минималистичен. Бэкенд шаблонен. GOROCK соед�
 
 ## Идея
 
-Три слоя. Каждый знает своё место.
+Любой бэкенд делает одно и то же: к нему обращаются, он решает, что делать, ходит в базы и внешние API и отвечает. GOROCK — шаблон такого проекта.
 
 ```
-project/
-├── cmd/        — Engine    — когда и как запустить
-├── internal/   — Realm     — что происходит внутри
-└── pkg/        — Toolkit   — инструменты без бизнес-логики
+[клиент, брокер, расписание] ⇄ App ⇄ Handlers ⇄ Services ⇄ [база, API, файлы, логи]
+
+        Main — одинаковая сборка · Config — настройки и константы проекта
 ```
 
-Открываешь любой GOROCK-проект — сразу знаешь где искать код.
-Работает для HTTP-сервера, consumer'а, worker'а, scheduler'а, CLI.
+- **Services** — инструменты: обёртки над технологиями и логикой, в одном каталоге, по имени.
+- **Handlers** — бизнес-логика: параметры на входе, результат или ошибка с видом на выходе, без привязки к технологии.
+- **App** — технология обращения: HTTP, очередь, cron, бот; один обработчик — в нескольких App.
+- **Main** и **Config** — сборка в правильном порядке и строгие настройки.
+
+Открываешь любой GOROCK-проект — сразу знаешь, где искать код.
 
 ---
 
@@ -35,14 +38,10 @@ project/
 
 | Раздел | |
 |--------|-|
-| [Что такое GOROCK](https://arzab.github.io/gorock/architecture/) | Идея, три слоя, структура проекта |
-| [Быстрый старт](https://arzab.github.io/gorock/architecture/getting-started) | HTTP-сервис на PostgreSQL за 10 минут |
-| [Концепты](https://arzab.github.io/gorock/architecture/concepts) | Пять принципов архитектуры |
-| [Engine](https://arzab.github.io/gorock/architecture/engine) | Запуск, lifecycle, Apps |
-| [Realm](https://arzab.github.io/gorock/architecture/realm) | Бизнес-логика, Delivery, Models |
-| [Toolkit](https://arzab.github.io/gorock/architecture/toolkit) | Services, Infra, Libs |
-| [Конфигурация](https://arzab.github.io/gorock/architecture/configs) | Конфиги как документация |
-| [gorock-kit](https://arzab.github.io/gorock/gorock-kit/) | Ядро: движок apps, конфиги, сервисы, обработка запросов |
+| [Архитектура](https://arzab.github.io/gorock/architecture/) | Слои, зачем каждый и как они работают вместе |
+| [Быстрый старт](https://arzab.github.io/gorock/guide/getting-started) | Проект заказов на PostgreSQL за 10 минут |
+| [Руководство](https://arzab.github.io/gorock/guide/services) | Как писать Service, Handler, App, Main, Config |
+| [gorock-kit](https://arzab.github.io/gorock/gorock-kit/) | Ядро: rockservices, rockhandlers, rockengine, rockconfig |
 | [Каталог](https://arzab.github.io/gorock/catalog/) | HTTP (rockhttp), PostgreSQL, Redis, логгер, события, расписание, Telegram |
 | [Примеры](https://arzab.github.io/gorock/examples/) | [examples/taskapi](examples/taskapi) — проект на gorock-kit v0.2.0 |
 
@@ -66,6 +65,6 @@ claude plugin install gorock@gorock
 | Репозиторий | Описание |
 |-------------|----------|
 | [arzab/gorock](https://github.com/arzab/gorock) | Архитектурный стандарт и документация |
-| [arzab/gorock-kit](https://github.com/arzab/gorock-kit) | Ядро: rockengine, rockconfig, rockservices, rockhandlers · v0.3.0, Go 1.26+ |
+| [arzab/gorock-kit](https://github.com/arzab/gorock-kit) | Ядро: rockservices, rockhandlers, rockengine, rockconfig · v0.4.0, Go 1.26+ |
 | [arzab/gorock-catalog](https://github.com/arzab/gorock-catalog) | Каталог: rockhttp и модули под конкретные технологии |
 | arzab/gorock-cli | Генератор слоёв и сущностей *(в разработке)* |

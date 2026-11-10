@@ -1,10 +1,10 @@
-# Как написать транспорт для rockhandlers
+# Как написать свой App
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockhandlers/TRANSPORT_RU.md — правьте файл в репозитории модуля. -->
 
 [Исходный файл на GitHub](https://github.com/arzab/gorock-kit/blob/main/rockhandlers/TRANSPORT_RU.md)
 
-Транспорт — это App, который принимает запросы своего протокола (HTTP, очередь, gRPC, CLI, Telegram…) и отдаёт их маршрутам rockhandlers. Эталонная реализация — [rockhttp](/catalog/rockhttp); пример consumer'а очереди — ниже.
+Свой App пишется, когда готового для вашей технологии нет. App принимает запросы своего протокола (HTTP, очередь, gRPC, CLI, Telegram…) и отдаёт их маршрутам rockhandlers. Эталонная реализация — [rockhttp](/catalog/rockhttp); пример consumer'а очереди — ниже.
 
 ## Кто за что отвечает
 
@@ -204,7 +204,7 @@ func (a *App) handle(ctx context.Context, msg *queue.Message) {
 }
 ```
 
-`Init`, `Exec` и `Stop` этого App-а — на странице [Apps](/architecture/apps) документации GOROCK.
+`Init`, `Exec` и `Stop` этого App-а — на странице [Как писать App](/guide/apps) документации GOROCK.
 
 ## Чек-лист
 

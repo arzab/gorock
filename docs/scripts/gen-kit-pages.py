@@ -30,55 +30,52 @@ LEGACY = ('::: warning Перенесён из gorock-kit v0.2.0 как есть
 
 # module -> (repo, layer badge, where it lives in a GOROCK project, legacy note or None)
 MODULES = {
-    'rockengine': ('kit', 'Engine',
-        'Сердце `cmd/main`: запускает и останавливает **apps** — HTTP, шину событий, планировщик. '
-        'Сервисы — отдельный слой, его поднимает [rockservices](./rockservices) до движка. '
-        'Контракт `App` — это интерфейс слоя Apps. → [Main](/architecture/main), [Apps](/architecture/apps)', None),
-    'rockconfig': ('kit', 'Configs',
-        'Загружает единый файл конфига в агрегированный `Configs` в `cmd/main`. '
-        'Каждый слой объявляет свой `Configs`, rockconfig проверяет их все разом. '
-        '→ [Конфигурация](/architecture/configs)', None),
-    'rockservices': ('kit', 'Toolkit · Services',
-        'Слой сервисов: `pkg/services/services.go` добавляет сервисы в каталог, `cmd/main` поднимает их '
-        'до apps и останавливает после, любой слой получает сервис по имени. '
-        '→ [Services](/architecture/services), [Main](/architecture/main)', None),
-    'rockhandlers': ('kit', 'Realm · Delivery',
-        'Форма обработки запроса в `internal/delivery`: цепочки шагов с `Next`, Locals, middleware, '
-        'валидацией и видами ошибок — без привязки к HTTP или очереди. Транспорт (App) только заполняет '
-        'Params и переводит результат в свой протокол. → [Delivery](/architecture/delivery)', None),
-    'rockhttp': ('catalog', 'Engine · Apps',
-        'HTTP App в `cmd/apps` на `net/http`: принимает маршруты rockhandlers из `internal/delivery/endpoints` '
-        'как `Endpoint{Method, Path, Handler}`. Экспериментальный. '
-        '→ [Apps](/architecture/apps), [Delivery](/architecture/delivery)', None),
-    'rocklog': ('catalog', 'Infra',
-        'Глобальный логгер проекта. `pkg/infra/logs` переводит настройки из файла в `rocklog.Init`, '
-        'дальше все слои пишут через `rocklog`. → [Infra](/architecture/infra)',
-        'логгер — инфраструктура, а не сервис; его API не меняется'),
-    'rockfiber': ('catalog', 'Engine · Apps',
+    'rockengine': ('kit', 'Main · движок App',
+        'Движок, которым Main запускает и останавливает **App**: по порядку, с перезапуском упавших и остановкой '
+        'по одному в обратном порядке. Сервисы — не его забота, их открывает и закрывает [rockservices](./rockservices). '
+        '→ [Main](/guide/main), [Как писать App](/guide/apps)', None),
+    'rockconfig': ('kit', 'Config',
+        'Загружает единый файл настроек в `Configs` Main и проверяет его целиком при старте. '
+        '→ [Как писать Config](/guide/configs)', None),
+    'rockservices': ('kit', 'Services',
+        'Каталог сервисов: `pkg/services/services.go` регистрирует сервисы под именами, Main открывает их до App '
+        'и закрывает после, любой код получает сервис по имени через геттер. → [Как писать Service](/guide/services)', None),
+    'rockhandlers': ('kit', 'Handlers',
+        'Обработчики в `internal/handlers`: цепочки шагов, параметры и результат, ошибки с видом, общие шаги, '
+        'middleware — без привязки к технологии. App заполняет параметры и переводит итог на свой язык. '
+        '→ [Как писать Handler](/guide/handlers)', None),
+    'rockhttp': ('catalog', 'App',
+        'HTTP App на `net/http`: в `cmd/apps/http.go` вы привязываете обработчики к методам и путям '
+        '(`Endpoint{Method, Path, Handler}`), он заполняет параметры и переводит итог в HTTP. Экспериментальный. '
+        '→ [Как писать App](/guide/apps)', None),
+    'rocklog': ('catalog', 'Services · логгер',
+        'Логгер проекта на `log/slog`. Настраивается сервисом-логгером, который регистрируется в каталоге первым; '
+        'дальше все пишут через `rocklog.Info`, `rocklog.FromContext(ctx)`. → [Как писать Service](/guide/services#логгер-тоже-сервис)',
+        'API не меняется; в README ниже логгер настраивается из `pkg/infra` — теперь это `Init` сервиса-логгера'),
+    'rockfiber': ('catalog', 'App',
         'HTTP App на Fiber v2 со своей моделью endpoints (`fiber.Handler`, `DefaultHandler`, `NewError`). '
-        '→ [Apps](/architecture/apps)',
-        'для новых сервисов берите [rockhttp](./rockhttp) на [rockhandlers](/gorock-kit/rockhandlers)'),
-    'rockbus': ('catalog', 'Engine · Apps',
-        'Шина событий внутри процесса — App в `cmd/apps`. Подписки описываются в '
-        '`internal/delivery/events`, публикация — через `rockbus.PublishAsync`. → [Apps](/architecture/apps)',
-        'обработчики событий пока не на rockhandlers'),
-    'rockcron': ('catalog', 'Engine · Apps',
-        'Планировщик — App в `cmd/apps`. Задачи описываются в `internal/delivery/jobs`. → [Apps](/architecture/apps)',
-        'задачи пока не на rockhandlers'),
-    'rocktelebot': ('catalog', 'Engine · Apps',
-        'Telegram-бот — App в `cmd/apps`. Команды и обработчики описываются в `internal/delivery`. '
-        '→ [Apps](/architecture/apps)',
-        'обработчики пока не на rockhandlers'),
-    'rockbun': ('catalog', 'Toolkit · Services',
-        'PostgreSQL через bun. Обычно — дочерний сервис внутри `pkg/services/repository`. '
-        '→ [Services](/architecture/services)',
-        'у сервиса нет `Name()`, поэтому в [rockservices](/gorock-kit/rockservices) его добавляют внутри своего сервиса '
-        '(repository владеет rockbun), а не напрямую; в README ниже он ещё регистрируется как ресурс движка — '
-        'этого механизма в kit v0.3.0 нет'),
-    'rockredis': ('catalog', 'Toolkit · Services',
-        'Redis для `pkg/services` (кэш, блокировки, pub/sub). → [Services](/architecture/services)',
-        'у сервиса нет `Name()`, поэтому в [rockservices](/gorock-kit/rockservices) его добавляют внутри своего сервиса, '
-        'а не напрямую; в README ниже он ещё регистрируется как ресурс движка — этого механизма в kit v0.3.0 нет'),
+        '→ [Как писать App](/guide/apps)',
+        'его endpoints — не обработчики rockhandlers; для новых проектов берите [rockhttp](./rockhttp)'),
+    'rockbus': ('catalog', 'App',
+        'Шина событий внутри процесса — App в `cmd/apps`. Публикация — `rockbus.PublishAsync`. → [Как писать App](/guide/apps)',
+        'его подписчики — не обработчики rockhandlers'),
+    'rockcron': ('catalog', 'App',
+        'Планировщик — App в `cmd/apps`, запускает задачи по расписанию. → [Как писать App](/guide/apps)',
+        'его задачи — не обработчики rockhandlers'),
+    'rocktelebot': ('catalog', 'App',
+        'Telegram-бот — App в `cmd/apps`. → [Как писать App](/guide/apps)',
+        'его обработчики — не обработчики rockhandlers'),
+    'rockbun': ('catalog', 'Services',
+        'Клиент PostgreSQL на bun. Обычно — дочерний сервис внутри вашего, например `pkg/services/orders`. '
+        'Его `Service` — это `Init` + `Stop`, поэтому его можно и зарегистрировать в каталоге напрямую: '
+        '`rockservices.Add(c, PostgresName, rockbun.NewService, cfg.Postgres)`. → [Как писать Service](/guide/services)',
+        'в README ниже он регистрируется как ресурс движка (`RegisterResource`) — такого механизма в ядре больше нет; '
+        'регистрируйте его через [rockservices](/gorock-kit/rockservices) или держите внутри своего сервиса'),
+    'rockredis': ('catalog', 'Services',
+        'Клиент Redis: строки, хэши, списки, pub/sub. Дочерний сервис внутри вашего или самостоятельный сервис в каталоге: '
+        '`rockservices.Add(c, CacheName, rockredis.NewService, cfg.Cache)`. → [Как писать Service](/guide/services)',
+        'в README ниже он регистрируется как ресурс движка (`RegisterResource`) — такого механизма в ядре больше нет; '
+        'регистрируйте его через [rockservices](/gorock-kit/rockservices)'),
 }
 
 
@@ -130,7 +127,7 @@ def guide(repo: str, module: str, src_name: str) -> tuple[str, str]:
     text = re.sub(r'\]\(\.\./(rock[a-z]+)(?:/README(?:_RU)?\.md)?/?\)',
                   lambda m: f'](/{REPOS[MODULES[m.group(1)][0]][1]}/{m.group(1)})' if m.group(1) in MODULES else m.group(0), text)
     text = text.replace('https://github.com/arzab/gorock-catalog/tree/main/rockhttp', '/catalog/rockhttp')
-    text = text.replace('https://arzab.github.io/gorock/architecture/apps', '/architecture/apps')
+    text = text.replace('https://arzab.github.io/gorock/guide/apps', '/guide/apps')
     lines = text.splitlines()
     header = (
         f'{lines[0]}\n\n'

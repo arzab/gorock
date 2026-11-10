@@ -2,12 +2,12 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockbus/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Engine · Apps
-Шина событий внутри процесса — App в `cmd/apps`. Подписки описываются в `internal/delivery/events`, публикация — через `rockbus.PublishAsync`. → [Apps](/architecture/apps)
+::: tip Место в GOROCK · App
+Шина событий внутри процесса — App в `cmd/apps`. Публикация — `rockbus.PublishAsync`. → [Как писать App](/guide/apps)
 :::
 
 ::: warning Перенесён из gorock-kit v0.2.0 как есть
-Код и API — те же, что были в `github.com/arzab/gorock-kit/rockbus@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockbus`. Модуль ещё не переведён на новое ядро: обработчики событий пока не на rockhandlers.
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rockbus@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockbus`. Модуль ещё не переведён на новое ядро: его подписчики — не обработчики rockhandlers.
 :::
 
 ```sh
