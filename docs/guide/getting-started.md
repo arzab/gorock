@@ -2,6 +2,8 @@
 
 Соберём проект заказов из [Архитектуры](/architecture/): создать заказ и получить его по HTTP, заказы хранятся в PostgreSQL.
 
+Готовый запускаемый проект того же устройства — [examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi): задачи вместо заказов, тесты обработчиков без базы и HTTP, проверен на PostgreSQL.
+
 Нужны Go 1.26+ и Docker (для PostgreSQL).
 
 ---
@@ -22,13 +24,13 @@ claude plugin install gorock@gorock
 mkdir orders && cd orders
 go mod init github.com/acme/orders
 
-go get github.com/arzab/gorock-kit/rockengine@latest \
-       github.com/arzab/gorock-kit/rockconfig@latest \
-       github.com/arzab/gorock-kit/rockservices@latest \
-       github.com/arzab/gorock-kit/rockhandlers@latest \
-       github.com/arzab/gorock-catalog/rockhttp@latest \
-       github.com/arzab/gorock-catalog/rockbun@latest \
-       github.com/arzab/gorock-catalog/rocklog@latest \
+go get github.com/arzab/gorock-kit/rockengine@v0.5.0 \
+       github.com/arzab/gorock-kit/rockconfig@v0.5.0 \
+       github.com/arzab/gorock-kit/rockservices@v0.5.0 \
+       github.com/arzab/gorock-kit/rockhandlers@v0.5.0 \
+       github.com/arzab/gorock-catalog/rockhttp@v0.5.0 \
+       github.com/arzab/gorock-catalog/rockbun@v0.5.0 \
+       github.com/arzab/gorock-catalog/rocklog@v0.5.0 \
        github.com/google/uuid@latest
 ```
 
@@ -39,7 +41,7 @@ go get github.com/arzab/gorock-kit/rockengine@latest \
 ```
 orders/
 ├── pkg/services/
-│   ├── services.go                  имена, Configs, Register, геттер Orders()
+│   ├── services.go                  ключи, Configs, Register
 │   ├── logger/service.go            логгер
 │   └── orders/                      заказы в PostgreSQL
 ├── internal/

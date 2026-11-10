@@ -88,7 +88,7 @@ if err := rockservices.Init(ctx); err != nil {
 }
 defer rockservices.Stop()
 
-return runMigrations(ctx, services.Orders())
+return runMigrations(ctx, services.Orders.Get())
 ```
 
 ---
