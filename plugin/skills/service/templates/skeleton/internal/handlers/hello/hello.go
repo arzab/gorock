@@ -6,14 +6,14 @@ import (
 	"github.com/arzab/gorock-kit/rockhandlers"
 )
 
-// GET /hello?name=Ann — a minimal handler. It knows nothing about HTTP: the
-// App fills Params (query tag) and turns the Result into JSON.
+// GET /hello?name=Ann — a minimal chain. It knows nothing about HTTP: the
+// App fills Params (query tag) and turns the Response into JSON.
 
 type Params struct {
 	Name string `query:"name"`
 }
 
-// Validate runs before every step: check first, use later.
+// Validate runs before every handler: check first, use later.
 func (p *Params) Validate() error {
 	if strings.TrimSpace(p.Name) == "" {
 		return rockhandlers.Invalid("name is required")
@@ -21,15 +21,16 @@ func (p *Params) Validate() error {
 	return nil
 }
 
-type Result struct {
+type Response struct {
 	Message string `json:"message"`
 }
 
-type Ctx = rockhandlers.Ctx[*Params, *Result]
+// Normalize runs after the chain, if there was no error.
+func (r *Response) Normalize() error { return nil }
 
-var Hello = rockhandlers.Chain("hello", hello)
+var Hello = rockhandlers.Chain(hello)
 
-func hello(c *Ctx) error {
-	c.Result.Message = "Hello, " + c.Params.Name
-	return nil
+func hello(_ *rockhandlers.Ctx, params *Params, response *Response) error {
+	response.Message = "Hello, " + params.Name
+	return nil // done; return c.Next() would run the next handler
 }
