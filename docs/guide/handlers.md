@@ -80,7 +80,7 @@ func create(c *CreateCtx) error {
         Item:  c.Params.Item,
         Qty:   c.Params.Qty,
     }
-    if err := services.Orders().Insert(c, order); err != nil {
+    if err := services.Orders.Get().Insert(c, order); err != nil {
         return fmt.Errorf("insert order: %w", err)
     }
     c.Result.Order = order
@@ -89,7 +89,18 @@ func create(c *CreateCtx) error {
 ```
 
 - **`rockhandlers.Chain(имя, шаги...)`** собирает обработчик из шагов. Имя попадает в логи и метрики.
-- **Шаг вызывает `c.Next()`,** чтобы передать управление следующему. Последний шаг `Next` не вызывает. Шаг, который не вызвал `Next`, завершает цепочку — например, при ответе из кэша.
+- **Шаг, вернувший `nil`, передаёт управление следующему сам** — вызывать `c.Next()` не обязательно. Вызывайте его, когда нужно выполнить код после остальной цепочки.
+- **Ранний успешный выход — `return rockhandlers.Done`.** Следующие шаги не выполняются, а клиент получает уже заполненный результат. Например, ответ из кэша:
+
+  ```go
+  func fromCache(c *rockhandlers.Ctx[*GetParams, *models.Order]) error {
+      if order, ok := cache.Get(c.Params.ID); ok {
+          *c.Result = order
+          return rockhandlers.Done // остальные шаги не нужны
+      }
+      return nil // дальше — загрузка из базы
+  }
+  ```
 - **`c` — это `context.Context` запроса.** Передавайте его в сервисы, и отмена запроса дойдёт до базы.
 - **Шаги передают друг другу данные через типизированные значения:** `UserKey.Set(c, user)` в одном шаге, `UserKey.MustGet(c)` в следующем.
 
@@ -114,7 +125,7 @@ func create(c *CreateCtx) error {
 var Get = rockhandlers.Chain("orders.get", get)
 
 func get(c *rockhandlers.Ctx[*GetParams, *models.Order]) error {
-    err := services.Orders().GetByID(c, c.Result, c.Params.ID)
+    err := services.Orders.Get().GetByID(c, c.Result, c.Params.ID)
     if errors.Is(err, ordersvc.ErrNotFound) {
         return rockhandlers.NotFound("order not found")
     }
@@ -181,7 +192,7 @@ func Log(c rockhandlers.Context) error {
 }
 ```
 
-Ошибки разбора запроса тоже проходят через middleware. Ограничение времени — `rockhandlers.Timeout(5*time.Second)`. Для одного обработчика: `Create.With(rockhandlers.Timeout(2*time.Second))`.
+Ошибки разбора запроса тоже проходят через middleware. Клиенту они приходят без имён Go-типов: `invalid JSON body`, `invalid query`, `invalid path` с полем в `fields`, а подробность декодера остаётся в причине — для логов. Ограничение времени — `rockhandlers.Timeout(5*time.Second)`. Для одного обработчика: `Create.With(rockhandlers.Timeout(2*time.Second))`.
 
 ---
 

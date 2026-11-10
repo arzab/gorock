@@ -4,28 +4,25 @@
 
 ---
 
-::: warning Примеры ещё на модели gorock-kit v0.2.0
-`taskapi` написан на gorock-kit `v0.2.0`: сервисы — ресурсы движка, HTTP — на Fiber (`rockfiber`), endpoints — цепочки `fiber.Handler`. В текущем ядре этого больше нет: сервисы — [rockservices](/gorock-kit/rockservices), обработчики — [rockhandlers](/gorock-kit/rockhandlers), HTTP — [rockhttp](/catalog/rockhttp). Проект на текущей модели — в [Быстром старте](/guide/getting-started); пример будет переведён на неё.
-:::
+## taskapi — HTTP-сервис задач на PostgreSQL
 
-## taskapi — HTTP-сервис на PostgreSQL
-
-[examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi) — GOROCK-проект на gorock-kit v0.2.0.
+[examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi) — проект на gorock-kit `v0.5.0` и gorock-catalog `v0.5.0`: создать задачу и получить её по HTTP. Устроен так же, как проект из [Быстрого старта](/guide/getting-started), и проверен на PostgreSQL.
 
 | Что показывает | Где |
 |---|---|
-| Запуск через движок: ресурсы → apps, graceful shutdown | `cmd/main/main.go` |
-| Готовые App: HTTP, шина событий, планировщик | `cmd/apps/apps.go` |
-| Самоописывающиеся endpoints, цепочка handlers, params/response | `internal/delivery/endpoints/` |
-| Бизнес-ошибки: 400, 404 и скрытые 500 | `internal/delivery/endpoints/get_task/` |
-| События и trace_id, который доходит из HTTP-запроса в лог события | `internal/delivery/events/` |
-| Задачи по расписанию | `internal/delivery/jobs/` |
+| Ключи сервисов, регистрация, логгер — первым сервисом | `pkg/services/services.go`, `pkg/services/logger/` |
 | Репозиторий поверх rockbun, не знающий о моделях | `pkg/services/repository/` |
-| Настройка логгера из конфига | `pkg/infra/logs/` |
+| Обработчики: параметры, проверка, результат, ошибки-виды | `internal/handlers/tasks/` |
+| Тесты обработчиков без PostgreSQL и HTTP — подделка в каталоге, `rockhandlers.Run` | `internal/handlers/tasks/*_test.go` |
+| Общая обвязка: логирование отклонённых и упавших запросов | `internal/handlers/middleware/log.go` |
+| HTTP App rockhttp и привязка обработчиков к методам и путям | `cmd/apps/` |
+| Сборка: конфиг → сервисы → App → остановка в обратном порядке | `cmd/main/main.go` |
 | Единый конфиг с `${ENV:-default}` | `configs/configs.yaml` |
 
 ```sh
 git clone https://github.com/arzab/gorock && cd gorock/examples/taskapi
+
+go test ./...   # без PostgreSQL и HTTP
 
 docker run -d --name tasks-db -p 5432:5432 \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=tasks \
@@ -33,3 +30,21 @@ docker run -d --name tasks-db -p 5432:5432 \
 
 DB_PASSWORD=postgres go run ./cmd/main
 ```
+
+```sh
+curl -X POST localhost:8080/api/v1/tasks -H 'Content-Type: application/json' -d '{"title":"write docs"}'
+# 201 {"task":{"id":"…","title":"write docs","done":false,"created_at":"…"}}
+
+curl localhost:8080/api/v1/tasks/<id>
+# 200 {"id":"…","title":"write docs","done":false,"created_at":"…"}
+
+curl -X POST localhost:8080/api/v1/tasks -H 'Content-Type: application/json' -d '{"title":""}'
+# 400 {"code":400,"status":"Bad Request","kind":"invalid","message":"invalid task","fields":{"title":"required"}}
+
+curl localhost:8080/api/v1/tasks/nope
+# 404 {"code":404,"status":"Not Found","kind":"not_found","message":"task not found"}
+```
+
+Если порт 5432 занят, запустите базу на другом, например `-p 55432:5432`, и передайте `DB_PORT=55432`.
+
+События и задачи по расписанию (rockbus, rockcron) вернутся в пример, когда эти модули каталога перейдут на новое ядро.

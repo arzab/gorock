@@ -1,23 +1,26 @@
 package services
 
 import (
-	"github.com/arzab/gorock-kit/rockengine"
+	"github.com/arzab/gorock-kit/rockservices"
 
-	"github.com/yourname/taskapi/pkg/services/repository"
+	"github.com/arzab/gorock/examples/taskapi/pkg/services/logger"
+	"github.com/arzab/gorock/examples/taskapi/pkg/services/repository"
+)
+
+// Keys: one per service, typed. Handlers use services.Repository.Get().
+var (
+	Logger     = rockservices.NewKey[logger.Service]("logger")
+	Repository = rockservices.NewKey[repository.Service]("repository")
 )
 
 type Configs struct {
+	Logger     logger.Configs `config:",omitempty"`
 	Repository repository.Configs
 }
 
-var repo repository.Service
-
-// Repository is the getter used by every layer.
-func Repository() repository.Service { return repo }
-
-// Register creates the services and hands their lifecycle to the engine:
-// they are initialised before any App and stopped after all of them.
-func Register(e *rockengine.Engine, cfg Configs) {
-	repo = repository.NewService(cfg.Repository)
-	e.MustRegisterResource("repository", repo)
+// Register adds every service to the catalog. Add order = Init order: the
+// logger goes first so the others can log while they start.
+func Register(c *rockservices.Catalog, cfg Configs) {
+	rockservices.Add(c, Logger, logger.NewService, cfg.Logger)
+	rockservices.Add(c, Repository, repository.NewService, cfg.Repository)
 }

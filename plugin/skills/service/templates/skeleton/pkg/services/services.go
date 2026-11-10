@@ -6,9 +6,10 @@ import (
 	"__MODULE__/pkg/services/logger"
 )
 
-// Names are given at registration and live here, with the getters.
-const (
-	LoggerName = "logger"
+// Keys: one per service, typed. Use them anywhere: services.Logger.Get().
+// A key declared here but not added in Register fails startup.
+var (
+	Logger = rockservices.NewKey[logger.Service]("logger")
 )
 
 // Configs aggregates the configs of every service. Add one field per service.
@@ -19,11 +20,12 @@ type Configs struct {
 // Register adds every service to the catalog. Add order = Init order; the
 // logger goes first so the others can log while they start.
 //
-//	rockservices.Add(c, OrdersName, orders.NewService, cfg.Orders)
+//	rockservices.Add(c, Orders, orders.NewService, cfg.Orders)
 //
-// and a getter below:
+// A shared dependency is passed as the value Add returned:
 //
-//	func Orders() orders.Service { return rockservices.Get[orders.Service](OrdersName) }
+//	pg := rockservices.Add(c, Postgres, postgres.NewService, cfg.Postgres)
+//	rockservices.Add(c, Orders, func(cfg orders.Configs) orders.Service { return orders.NewService(cfg, pg) }, cfg.Orders)
 func Register(c *rockservices.Catalog, cfg Configs) {
-	rockservices.Add(c, LoggerName, logger.NewService, cfg.Logger)
+	rockservices.Add(c, Logger, logger.NewService, cfg.Logger)
 }

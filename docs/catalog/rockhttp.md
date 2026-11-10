@@ -39,7 +39,7 @@ engine.MustRegister("http", server)
 
 Теги во встроенных структурах тоже биндятся. Например, `auth.BearerAuth` с `header:"Authorization"`.
 
-Порядок: JSON, form, query, header, path — следующий источник перезаписывает предыдущий. Ошибки конвертации и тело больше `MaxBodyBytes` → 400.
+Порядок: JSON, form, query, header, path — следующий источник перезаписывает предыдущий. Неверный ввод → 400 с сообщением без имён Go-типов: `invalid JSON body`, `invalid query`, `invalid path`, `invalid header`, `invalid form` (поле — в `fields`, например `{"qty": "must be a number"}`) или `request body is larger than N bytes`.
 
 ## Result
 

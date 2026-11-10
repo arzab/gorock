@@ -43,12 +43,12 @@ find "$target" -type f \( -name '*.go' -o -name 'go.mod' \) -print0 |
 cd "$target"
 export GOWORK=off
 go get \
-  github.com/arzab/gorock-kit/rockengine@latest \
-  github.com/arzab/gorock-kit/rockconfig@latest \
-  github.com/arzab/gorock-kit/rockservices@latest \
-  github.com/arzab/gorock-kit/rockhandlers@latest \
-  github.com/arzab/gorock-catalog/rockhttp@latest \
-  github.com/arzab/gorock-catalog/rocklog@latest
+  github.com/arzab/gorock-kit/rockengine@v0.5.0 \
+  github.com/arzab/gorock-kit/rockconfig@v0.5.0 \
+  github.com/arzab/gorock-kit/rockservices@v0.5.0 \
+  github.com/arzab/gorock-kit/rockhandlers@v0.5.0 \
+  github.com/arzab/gorock-catalog/rockhttp@v0.5.0 \
+  github.com/arzab/gorock-catalog/rocklog@v0.5.0
 go mod tidy
 gofmt -l . | (! grep .) || { echo "gofmt reported unformatted files" >&2; exit 1; }
 go vet ./...

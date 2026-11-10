@@ -43,7 +43,7 @@ Go минималистичен. Бэкенд шаблонен. GOROCK соед�
 | [Руководство](https://arzab.github.io/gorock/guide/services) | Как писать Service, Handler, App, Main, Config |
 | [gorock-kit](https://arzab.github.io/gorock/gorock-kit/) | Ядро: rockservices, rockhandlers, rockengine, rockconfig |
 | [Каталог](https://arzab.github.io/gorock/catalog/) | HTTP (rockhttp), PostgreSQL, Redis, логгер, события, расписание, Telegram |
-| [Примеры](https://arzab.github.io/gorock/examples/) | [examples/taskapi](examples/taskapi) — проект на gorock-kit v0.2.0 |
+| [Примеры](https://arzab.github.io/gorock/examples/) | [examples/taskapi](examples/taskapi) — HTTP-сервис задач на PostgreSQL, v0.5.0 |
 
 ---
 
@@ -65,6 +65,6 @@ claude plugin install gorock@gorock
 | Репозиторий | Описание |
 |-------------|----------|
 | [arzab/gorock](https://github.com/arzab/gorock) | Архитектурный стандарт и документация |
-| [arzab/gorock-kit](https://github.com/arzab/gorock-kit) | Ядро: rockservices, rockhandlers, rockengine, rockconfig · v0.4.0, Go 1.26+ |
-| [arzab/gorock-catalog](https://github.com/arzab/gorock-catalog) | Каталог: rockhttp и модули под конкретные технологии |
+| [arzab/gorock-kit](https://github.com/arzab/gorock-kit) | Ядро: rockservices, rockhandlers, rockengine, rockconfig · v0.5.0, Go 1.26+ |
+| [arzab/gorock-catalog](https://github.com/arzab/gorock-catalog) | Каталог: rockhttp и модули под конкретные технологии · v0.5.0 |
 | arzab/gorock-cli | Генератор слоёв и сущностей *(в разработке)* |

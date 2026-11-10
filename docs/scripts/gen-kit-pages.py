@@ -38,8 +38,8 @@ MODULES = {
         'Загружает единый файл настроек в `Configs` Main и проверяет его целиком при старте. '
         '→ [Как писать Config](/guide/configs)', None),
     'rockservices': ('kit', 'Services',
-        'Каталог сервисов: `pkg/services/services.go` регистрирует сервисы под именами, Main открывает их до App '
-        'и закрывает после, любой код получает сервис по имени через геттер. → [Как писать Service](/guide/services)', None),
+        'Каталог сервисов: `pkg/services/services.go` объявляет типизированные ключи и регистрирует сервисы, Main открывает их до App '
+        'и закрывает после, любой код получает сервис по ключу: `services.Orders.Get()`. → [Как писать Service](/guide/services)', None),
     'rockhandlers': ('kit', 'Handlers',
         'Обработчики в `internal/handlers`: цепочки шагов, параметры и результат, ошибки с видом, общие шаги, '
         'middleware — без привязки к технологии. App заполняет параметры и переводит итог на свой язык. '
@@ -68,12 +68,12 @@ MODULES = {
     'rockbun': ('catalog', 'Services',
         'Клиент PostgreSQL на bun. Обычно — дочерний сервис внутри вашего, например `pkg/services/orders`. '
         'Его `Service` — это `Init` + `Stop`, поэтому его можно и зарегистрировать в каталоге напрямую: '
-        '`rockservices.Add(c, PostgresName, rockbun.NewService, cfg.Postgres)`. → [Как писать Service](/guide/services)',
+        '`rockservices.Add(c, Postgres, rockbun.NewService, cfg.Postgres)`. → [Как писать Service](/guide/services)',
         'в README ниже он регистрируется как ресурс движка (`RegisterResource`) — такого механизма в ядре больше нет; '
         'регистрируйте его через [rockservices](/gorock-kit/rockservices) или держите внутри своего сервиса'),
     'rockredis': ('catalog', 'Services',
         'Клиент Redis: строки, хэши, списки, pub/sub. Дочерний сервис внутри вашего или самостоятельный сервис в каталоге: '
-        '`rockservices.Add(c, CacheName, rockredis.NewService, cfg.Cache)`. → [Как писать Service](/guide/services)',
+        '`rockservices.Add(c, Cache, rockredis.NewService, cfg.Cache)`. → [Как писать Service](/guide/services)',
         'в README ниже он регистрируется как ресурс движка (`RegisterResource`) — такого механизма в ядре больше нет; '
         'регистрируйте его через [rockservices](/gorock-kit/rockservices)'),
 }

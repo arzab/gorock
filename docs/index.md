@@ -30,7 +30,7 @@ features:
     linkText: Как писать Handler
 
   - icon: 🧰
-    title: Сервисы по имени
+    title: Сервисы по ключу
     details: База, кэш, внешние API, логгер — сервисы в одном каталоге. Открываются до запуска App, закрываются после, берутся по имени откуда угодно.
     link: /guide/services
     linkText: Как писать Service

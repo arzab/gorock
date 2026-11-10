@@ -6,7 +6,7 @@
 
 ```
 pkg/services/
-├── services.go            имена, Configs, Register, геттеры
+├── services.go            ключи, Configs, Register
 ├── orders/
 │   ├── configs.go         настройки сервиса
 │   ├── interface.go       что сервис умеет
@@ -88,18 +88,18 @@ func (s *service) GetByID(ctx context.Context, order any, id string) error {
 - **Дочерний сервис** (здесь — клиент PostgreSQL [rockbun](/catalog/rockbun)) живёт внутри родителя. Родитель открывает и закрывает его сам, а каталогу виден только родитель.
 - **Сервис не импортирует `internal/`.** Модели приходят как `any` (ORM сам читает теги), или сервис объявляет у себя интерфейс, который модель выполняет.
 
-## 4. Регистрация и геттеры — `services.go`
+## 4. Ключи и регистрация — `services.go`
 
-Все сервисы проекта регистрируются в одном файле. Здесь же — их имена и геттеры.
+Все сервисы проекта регистрируются в одном файле. Здесь же — их **ключи**: имя и тип сервиса, записанные один раз.
 
 ```go
 // pkg/services/services.go
 package services
 
-// Имена задаются при регистрации и живут здесь.
-const (
-    LoggerName = "logger"
-    OrdersName = "orders"
+// Ключи: по одному на сервис, типизированные.
+var (
+    Logger = rockservices.NewKey[logger.Service]("logger")
+    Orders = rockservices.NewKey[orders.Service]("orders")
 )
 
 type Configs struct {
@@ -110,19 +110,20 @@ type Configs struct {
 // Register добавляет сервисы в каталог. Порядок добавления = порядок Init:
 // логгер первым, чтобы остальные могли писать в лог уже при запуске.
 func Register(c *rockservices.Catalog, cfg Configs) {
-    rockservices.Add(c, LoggerName, logger.NewService, cfg.Logger)
-    rockservices.Add(c, OrdersName, orders.NewService, cfg.Orders)
+    rockservices.Add(c, Logger, logger.NewService, cfg.Logger)
+    rockservices.Add(c, Orders, orders.NewService, cfg.Orders)
 }
-
-// Orders — геттер для всех слоёв.
-func Orders() orders.Service { return rockservices.Get[orders.Service](OrdersName) }
 ```
+
+`Add` сверяет тип конструктора с ключом при компиляции: зарегистрировать под ключом `Orders` что-то, кроме `orders.Service`, не получится.
 
 Использование — откуда угодно, обычно из обработчика:
 
 ```go
-err := services.Orders().Insert(c, order)
+err := services.Orders.Get().Insert(c, order) // типизировано, без приведения
 ```
+
+**Забытая регистрация ловится при старте.** Если ключ объявлен, но сервис под ним не добавлен в `Register`, `rockservices.Init` вернёт ошибку с именем ключа, и проект не запустится.
 
 `cmd/main` вызывает `services.Register`, затем открывает каталог до запуска App и закрывает после → [Main](/guide/main).
 
@@ -171,29 +172,34 @@ func (s *service) Stop() error { return nil }
 
 **Сервис владеет зависимостью** — как `orders` своим клиентом PostgreSQL. Создайте её в конструкторе, открывайте и закрывайте в своих `Init` и `Stop`.
 
-**Зависимость общая** — например, один пул на несколько сервисов. Тогда она — отдельный сервис в каталоге. Зарегистрируйте её раньше и передайте в конструктор через замыкание:
+**Зависимость общая** — например, один пул на несколько сервисов. Тогда она — отдельный сервис в каталоге. Зарегистрируйте её раньше и передайте в конструктор **значение, которое вернул `Add`**:
 
 ```go
-rockservices.Add(c, PostgresName, postgres.NewService, cfg.Postgres)
-rockservices.Add(c, OrdersName, func(cfg orders.Configs) orders.Service {
-    return orders.NewService(cfg, Postgres()) // создан, но ещё не открыт — пользоваться с Init
+pg := rockservices.Add(c, Postgres, postgres.NewService, cfg.Postgres)
+rockservices.Add(c, Orders, func(cfg orders.Configs) orders.Service {
+    return orders.NewService(cfg, pg) // создан, но ещё не открыт — пользоваться с Init
 }, cfg.Orders)
 ```
 
-Пакет сервиса не знает, под каким именем лежит его зависимость. Всё связывание — в `services.go`.
+Не вызывайте `Postgres.Get()` внутри конструктора: он читает каталог по умолчанию, а не тот, в который идёт регистрация. В тесте с `Register(rockservices.New(), cfg)` сервис получил бы чужую зависимость или панику. Пакет сервиса не знает, под каким ключом лежит его зависимость: всё связывание — в `services.go`.
 
-**Два экземпляра одного сервиса** — две регистрации под разными именами:
+**Два экземпляра одного сервиса** — два ключа и две регистрации:
 
 ```go
-rockservices.Add(c, OrdersDBName, postgres.NewService, cfg.OrdersDB)
-rockservices.Add(c, AnalyticsDBName, postgres.NewService, cfg.AnalyticsDB)
+var (
+    OrdersDB    = rockservices.NewKey[postgres.Service]("orders_db")
+    AnalyticsDB = rockservices.NewKey[postgres.Service]("analytics_db")
+)
+
+rockservices.Add(c, OrdersDB, postgres.NewService, cfg.OrdersDB)
+rockservices.Add(c, AnalyticsDB, postgres.NewService, cfg.AnalyticsDB)
 ```
 
 ---
 
 ## Тестирование
 
-Обработчики берут сервисы через геттеры, а геттеры читают каталог по умолчанию. В тесте соберите каталог с подделкой и сделайте его каталогом по умолчанию:
+Обработчики берут сервисы через `key.Get()`, а он читает каталог по умолчанию. В тесте соберите каталог с подделкой и сделайте его каталогом по умолчанию:
 
 ```go
 type fakeOrders struct{ inserted []any }
@@ -208,7 +214,7 @@ func (f *fakeOrders) GetByID(context.Context, any, string) error { return orders
 
 func TestCreate(t *testing.T) {
     c := rockservices.New()
-    rockservices.Add(c, services.OrdersName, func(struct{}) ordersvc.Service { return &fakeOrders{} }, struct{}{})
+    rockservices.Add(c, services.Orders, func(struct{}) ordersvc.Service { return &fakeOrders{} }, struct{}{})
     prev := rockservices.SetDefault(c)
     t.Cleanup(func() { rockservices.SetDefault(prev) })
     // ... вызвать обработчик
@@ -217,12 +223,29 @@ func TestCreate(t *testing.T) {
 
 ---
 
+Полные тесты с подделкой репозитория — в примере [taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi/internal/handlers/tasks): создание, неверный ввод, неизвестный id, ошибка репозитория.
+
+**Тесты, которые подменяют каталог по умолчанию, нельзя запускать с `t.Parallel()`:** каталог по умолчанию один на процесс.
+
+---
+
+## Цена каталога
+
+Каталог — осознанный компромисс: мы отказались протаскивать зависимости через конструкторы всех слоёв. У этого есть цена, о ней лучше знать заранее.
+
+- **Зависимости не видны в сигнатуре обработчика.** Чтобы узнать, какие сервисы он трогает, нужно прочитать его код. Помогает то, что все ключи лежат в одном файле, а обращение всегда выглядит одинаково — `services.X.Get()`, и его легко найти поиском.
+- **Забытая регистрация ловится только для каталога по умолчанию.** `Init` каталога по умолчанию проверяет, что каждый объявленный ключ добавлен. Каталоги из `rockservices.New()` (тесты) этого не делают: в них кладут только нужные подделки. Обращение к сервису, которого в таком каталоге нет, — паника с именем ключа.
+- **Тесты с подменой каталога выполняются последовательно.** `SetDefault` меняет глобальный каталог, поэтому такие тесты нельзя запускать с `t.Parallel()`.
+
+---
+
 ## Чего не делать
 
 - **Не открывать соединения в конструкторе.** Только в `Init` — иначе их некому закрыть, если старт упал.
 - **Не принимать бизнес-решения в сервисе.** Списывать ли деньги и что делать при отказе, решает обработчик.
 - **Не создавать слой use case поверх сервисов.** Обработчик вызывает сервисы напрямую.
-- **Не передавать сервисы через конструкторы обработчиков.** Для этого есть каталог и геттеры.
-- **Не хранить имя сервиса в самом сервисе.** Имя — свойство регистрации.
+- **Не передавать сервисы через конструкторы обработчиков.** Для этого есть каталог и ключи.
+- **Не хранить имя сервиса в самом сервисе.** Имя — это ключ, под которым его регистрируют.
+- **Не вызывать `key.Get()` внутри конструктора сервиса.** Зависимость — значение, которое вернул `Add`.
 
 → Дальше: [Как писать Handler](/guide/handlers) · API: [rockservices](/gorock-kit/rockservices)
