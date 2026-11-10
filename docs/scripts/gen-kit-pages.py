@@ -31,21 +31,21 @@ LEGACY = ('::: warning Перенесён из gorock-kit v0.2.0 как есть
 # module -> (repo, layer badge, where it lives in a GOROCK project, legacy note or None)
 MODULES = {
     'rockengine': ('kit', 'Main · движок App',
-        'Движок, которым Main запускает и останавливает **App**: по порядку, с перезапуском упавших и остановкой '
-        'по одному в обратном порядке. Сервисы — не его забота, их открывает и закрывает [rockservices](./rockservices). '
+        'Движок, которым `cmd/apps` запускает **App**: `New(map)` + `Run(ctx, порядок...)`, остановка по одному в обратном порядке. '
+        'Сервисы — не его забота, их открывает и закрывает [rockservices](./rockservices). '
         '→ [Main](/guide/main), [Как писать App](/guide/apps)', None),
     'rockconfig': ('kit', 'Config',
         'Загружает единый файл настроек в `Configs` Main и проверяет его целиком при старте. '
         '→ [Как писать Config](/guide/configs)', None),
     'rockservices': ('kit', 'Services',
-        'Каталог сервисов: `pkg/services/services.go` объявляет типизированные ключи и регистрирует сервисы, Main открывает их до App '
-        'и закрывает после, любой код получает сервис по ключу: `services.Orders.Get()`. → [Как писать Service](/guide/services)', None),
+        'Каталог сервисов: `pkg/services/services.go` собирает `map` из названий и сервисов, запускает их в нужном порядке до App '
+        'и закрывает после; любой код получает сервис через геттер, например `services.Repository()`. → [Как писать Service](/guide/services)', None),
     'rockhandlers': ('kit', 'Handlers',
-        'Обработчики в `internal/handlers`: цепочки шагов, параметры и результат, ошибки с видом, общие шаги, '
-        'middleware — без привязки к технологии. App заполняет параметры и переводит итог на свой язык. '
+        'Обработчики в `internal/handlers`: цепочки в стиле Fiber — `func(c, params, response) error`, `c.Next()`, '
+        '`Validate`/`Normalize`, ошибки с видом, middleware. App заполняет параметры и переводит итог на свой язык. '
         '→ [Как писать Handler](/guide/handlers)', None),
     'rockhttp': ('catalog', 'App',
-        'HTTP App на `net/http`: в `cmd/apps/http.go` вы привязываете обработчики к методам и путям '
+        'HTTP App на `net/http`: в `cmd/apps/http.go` вы привязываете цепочки к методам и путям '
         '(`Endpoint{Method, Path, Handler}`), он заполняет параметры и переводит итог в HTTP. Экспериментальный. '
         '→ [Как писать App](/guide/apps)', None),
     'rocklog': ('catalog', 'Services · логгер',
@@ -67,13 +67,13 @@ MODULES = {
         'его обработчики — не обработчики rockhandlers'),
     'rockbun': ('catalog', 'Services',
         'Клиент PostgreSQL на bun. Обычно — дочерний сервис внутри вашего, например `pkg/services/orders`. '
-        'Его `Service` — это `Init` + `Stop`, поэтому его можно и зарегистрировать в каталоге напрямую: '
-        '`rockservices.Add(c, Postgres, rockbun.NewService, cfg.Postgres)`. → [Как писать Service](/guide/services)',
+        'Его `Service` — это `Init` + `Stop`, поэтому его можно и '
+        'положить в `map` каталога: `"postgres": rockbun.NewService(cfg.Postgres)`. → [Как писать Service](/guide/services)',
         'в README ниже он регистрируется как ресурс движка (`RegisterResource`) — такого механизма в ядре больше нет; '
         'регистрируйте его через [rockservices](/gorock-kit/rockservices) или держите внутри своего сервиса'),
     'rockredis': ('catalog', 'Services',
         'Клиент Redis: строки, хэши, списки, pub/sub. Дочерний сервис внутри вашего или самостоятельный сервис в каталоге: '
-        '`rockservices.Add(c, Cache, rockredis.NewService, cfg.Cache)`. → [Как писать Service](/guide/services)',
+        '`"cache": rockredis.NewService(cfg.Cache)` в `map` каталога. → [Как писать Service](/guide/services)',
         'в README ниже он регистрируется как ресурс движка (`RegisterResource`) — такого механизма в ядре больше нет; '
         'регистрируйте его через [rockservices](/gorock-kit/rockservices)'),
 }

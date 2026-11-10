@@ -4,20 +4,20 @@
 
 | Модуль | Что это | Слой | Статус |
 |---|---|---|---|
-| [rockhttp](./rockhttp) | HTTP App на `net/http` для обработчиков rockhandlers | App | экспериментальный, рекомендуемый HTTP App · v0.5.0 |
-| [rockbun](./rockbun) | клиент PostgreSQL (bun) | Services | перенесён из kit v0.2.0 · v0.5.0 |
-| [rockredis](./rockredis) | клиент Redis (go-redis) | Services | перенесён из kit v0.2.0 · v0.5.0 |
-| [rocklog](./rocklog) | логгер на `log/slog` | Services · логгер | перенесён из kit v0.2.0 · v0.5.0 |
-| [rockfiber](./rockfiber) | HTTP App на Fiber v2, своя модель endpoints | App | перенесён из kit v0.2.0 · v0.5.0 |
-| [rockbus](./rockbus) | шина событий внутри процесса | App | перенесён из kit v0.2.0 · v0.5.0 |
-| [rockcron](./rockcron) | планировщик (robfig/cron) | App | перенесён из kit v0.2.0 · v0.5.0 |
-| [rocktelebot](./rocktelebot) | Telegram-бот (telebot.v3) | App | перенесён из kit v0.2.0 · v0.5.0 |
+| [rockhttp](./rockhttp) | HTTP App на `net/http` для обработчиков rockhandlers | App | экспериментальный, рекомендуемый HTTP App · v0.6.0 |
+| [rockbun](./rockbun) | клиент PostgreSQL (bun) | Services | перенесён из kit v0.2.0 · v0.6.0 |
+| [rockredis](./rockredis) | клиент Redis (go-redis) | Services | перенесён из kit v0.2.0 · v0.6.0 |
+| [rocklog](./rocklog) | логгер на `log/slog` | Services · логгер | перенесён из kit v0.2.0 · v0.6.0 |
+| [rockfiber](./rockfiber) | HTTP App на Fiber v2, своя модель endpoints | App | перенесён из kit v0.2.0 · v0.6.0 |
+| [rockbus](./rockbus) | шина событий внутри процесса | App | перенесён из kit v0.2.0 · v0.6.0 |
+| [rockcron](./rockcron) | планировщик (robfig/cron) | App | перенесён из kit v0.2.0 · v0.6.0 |
+| [rocktelebot](./rocktelebot) | Telegram-бот (telebot.v3) | App | перенесён из kit v0.2.0 · v0.6.0 |
 
 ```sh
-go get github.com/arzab/gorock-catalog/rockhttp@v0.5.0
+go get github.com/arzab/gorock-catalog/rockhttp@v0.6.0
 ```
 
-Версии каталога совпадают с версиями ядра: каталог `v0.5.0` работает с gorock-kit `v0.5.0`.
+Версии каталога совпадают с версиями ядра: каталог `v0.6.0` работает с gorock-kit `v0.6.0`.
 
 ## «Перенесён из kit v0.2.0»
 

@@ -3,7 +3,7 @@
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockredis/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · Services
-Клиент Redis: строки, хэши, списки, pub/sub. Дочерний сервис внутри вашего или самостоятельный сервис в каталоге: `rockservices.Add(c, Cache, rockredis.NewService, cfg.Cache)`. → [Как писать Service](/guide/services)
+Клиент Redis: строки, хэши, списки, pub/sub. Дочерний сервис внутри вашего или самостоятельный сервис в каталоге: `"cache": rockredis.NewService(cfg.Cache)` в `map` каталога. → [Как писать Service](/guide/services)
 :::
 
 ::: warning Перенесён из gorock-kit v0.2.0 как есть

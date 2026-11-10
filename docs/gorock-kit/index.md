@@ -2,7 +2,7 @@
 
 Ядро GOROCK — часть работы, одинаковая в каждом проекте: каталог сервисов, механизм обработчиков, движок App и строгая загрузка настроек. Вы пишете то, что отличает ваш проект; ядро — то, что повторяется везде.
 
-[GitHub](https://github.com/arzab/gorock-kit) · [CHANGELOG](https://github.com/arzab/gorock-kit/blob/main/CHANGELOG.md) · текущая версия **v0.5.0** · требуется **Go 1.26+**
+[GitHub](https://github.com/arzab/gorock-kit) · [CHANGELOG](https://github.com/arzab/gorock-kit/blob/main/CHANGELOG.md) · текущая версия **v0.6.0** · требуется **Go 1.26+**
 
 ---
 
@@ -10,9 +10,9 @@
 
 | Слой | Модуль | Что даёт |
 |---|---|---|
-| **Services** | [rockservices](./rockservices) | каталог сервисов: типизированные ключи, получение сервиса откуда угодно, проверка регистрации на старте, открытие до App и закрытие после |
-| **Handlers** | [rockhandlers](./rockhandlers) | обработчики: цепочки шагов, параметры и результат, ошибки с видом, общие шаги, middleware — без привязки к технологии |
-| **Main** | [rockengine](./rockengine) | движок App: запуск по порядку, перезапуск упавших, остановка по одному в обратном порядке |
+| **Services** | [rockservices](./rockservices) | каталог сервисов: `map` «название → сервис», запуск в заданном порядке до App, остановка после |
+| **Handlers** | [rockhandlers](./rockhandlers) | обработчики в стиле Fiber: `c.Next()`, `Validate`/`Normalize`, ошибки с видом, middleware — без привязки к технологии |
+| **Main** | [rockengine](./rockengine) | движок App: `New(map)` + `Run(ctx, порядок...)`, остановка по одному в обратном порядке |
 | **Config** | [rockconfig](./rockconfig) | один файл → типизированные `Configs`, `${ENV}`, значения по умолчанию, проверка пропусков и опечаток |
 
 Модули не импортируют друг друга, ставите только нужные. `rockconfig` зависит от `gopkg.in/yaml.v3`, остальные — только от стандартной библиотеки.
@@ -26,7 +26,7 @@ go get github.com/arzab/gorock-kit/rockengine@latest
 go get github.com/arzab/gorock-kit/rockconfig@latest
 ```
 
-Все модули выпускаются одной версией; теги — по модулю (`rockservices/v0.5.0`).
+Все модули выпускаются одной версией; теги — по модулю (`rockservices/v0.6.0`).
 
 ---
 
@@ -43,10 +43,12 @@ type Service interface {
 }
 ```
 
-**Обработчик** — цепочка шагов, которую вызывает App:
+**Обработчик** — как во Fiber, только без HTTP; цепочку запускает App:
 
 ```go
-var Create = rockhandlers.Chain("orders.create", steps.Bearer, create)
+func create(c *rockhandlers.Ctx, params *CreateParams, response *CreateResponse) error { ... }
+
+var Create = rockhandlers.Chain(checkAuth, create) // params: Validate(), response: Normalize()
 ```
 
 **App** — то, чем управляет движок:

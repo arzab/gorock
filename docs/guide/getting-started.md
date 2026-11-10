@@ -1,8 +1,6 @@
 # Быстрый старт
 
-Соберём проект заказов из [Архитектуры](/architecture/): создать заказ и получить его по HTTP, заказы хранятся в PostgreSQL.
-
-Готовый запускаемый проект того же устройства — [examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi): задачи вместо заказов, тесты обработчиков без базы и HTTP, проверен на PostgreSQL.
+Соберём HTTP-сервис задач на PostgreSQL: создать задачу и получить её. Готовый результат — пример [examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi): код на этой странице и в руководстве взят из него.
 
 Нужны Go 1.26+ и Docker (для PostgreSQL).
 
@@ -15,22 +13,22 @@
 ```sh
 claude plugin marketplace add arzab/gorock
 claude plugin install gorock@gorock
-# затем попросите: «создай GOROCK-проект github.com/acme/orders»
+# затем попросите: «создай GOROCK-проект github.com/acme/tasks»
 ```
 
 **Вручную:**
 
 ```sh
-mkdir orders && cd orders
-go mod init github.com/acme/orders
+mkdir tasks && cd tasks
+go mod init github.com/acme/tasks
 
-go get github.com/arzab/gorock-kit/rockengine@v0.5.0 \
-       github.com/arzab/gorock-kit/rockconfig@v0.5.0 \
-       github.com/arzab/gorock-kit/rockservices@v0.5.0 \
-       github.com/arzab/gorock-kit/rockhandlers@v0.5.0 \
-       github.com/arzab/gorock-catalog/rockhttp@v0.5.0 \
-       github.com/arzab/gorock-catalog/rockbun@v0.5.0 \
-       github.com/arzab/gorock-catalog/rocklog@v0.5.0 \
+go get github.com/arzab/gorock-kit/rockengine@v0.6.0 \
+       github.com/arzab/gorock-kit/rockconfig@v0.6.0 \
+       github.com/arzab/gorock-kit/rockservices@v0.6.0 \
+       github.com/arzab/gorock-kit/rockhandlers@v0.6.0 \
+       github.com/arzab/gorock-catalog/rockhttp@v0.6.0 \
+       github.com/arzab/gorock-catalog/rockbun@v0.6.0 \
+       github.com/arzab/gorock-catalog/rocklog@v0.6.0 \
        github.com/google/uuid@latest
 ```
 
@@ -39,44 +37,40 @@ go get github.com/arzab/gorock-kit/rockengine@v0.5.0 \
 ## 2. Что будет в проекте
 
 ```
-orders/
+tasks/
 ├── pkg/services/
-│   ├── services.go                  ключи, Configs, Register
+│   ├── services.go                  каталог: названия, Configs, Init, Stop, геттеры
 │   ├── logger/service.go            логгер
-│   └── orders/                      заказы в PostgreSQL
+│   └── repository/                  задачи в PostgreSQL
 ├── internal/
 │   ├── handlers/
-│   │   ├── orders/create.go         создать заказ
-│   │   ├── orders/get.go            получить заказ
-│   │   ├── steps/auth.go            проверка токена
+│   │   ├── tasks/create.go          создать задачу (+ тест)
+│   │   ├── tasks/get.go             получить задачу (+ тест)
 │   │   └── middleware/log.go        логирование ошибок
-│   └── models/order.go
+│   └── models/task.go
 ├── cmd/
-│   ├── apps/apps.go, http.go        HTTP App и привязка обработчиков
+│   ├── apps/apps.go, http.go        HTTP App и привязка цепочек
 │   └── main/main.go
 ├── configs/configs.yaml
-└── migrations/001_orders.sql
+└── migrations/001_tasks.sql
 ```
 
-Пишите снизу вверх, по страницам руководства — код на них ровно из этого проекта:
+Пишите снизу вверх, по страницам руководства:
 
-1. **Сервисы** — [Как писать Service](/guide/services): `orders` и `logger`, регистрация в `services.go`.
-2. **Модель** `internal/models/order.go` — структура с тегами `bun` (таблица `orders`: `id`, `owner`, `item`, `qty`, `created_at`).
-3. **Обработчики** — [Как писать Handler](/guide/handlers): `Create`, `Get`, шаг `Bearer`, middleware `Log`.
+1. **Сервисы** — [Как писать Service](/guide/services): `repository` и `logger`, каталог в `services.go`.
+2. **Модель** `internal/models/task.go` — структура с тегами `bun` (таблица `tasks`: `id`, `title`, `done`, `created_at`).
+3. **Обработчики** — [Как писать Handler](/guide/handlers): `tasks.Create`, `tasks.Get`, middleware `Log`.
 4. **App** — [Как писать App](/guide/apps): `http.go` и `apps.go`.
 5. **Main** — [Main](/guide/main).
 6. **Конфиг** — [Как писать Config](/guide/configs).
 
-Миграция:
-
 ```sql
--- migrations/001_orders.sql
-CREATE TABLE orders (
-    id         text PRIMARY KEY,
-    owner      text NOT NULL,
-    item       text NOT NULL,
-    qty        int  NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT now()
+-- migrations/001_tasks.sql
+CREATE TABLE IF NOT EXISTS tasks (
+    id         TEXT PRIMARY KEY,
+    title      TEXT        NOT NULL,
+    done       BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
@@ -85,33 +79,31 @@ CREATE TABLE orders (
 ## 3. Запуск
 
 ```sh
-docker run -d --name orders-db -p 5432:5432 \
-  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=orders \
+go test ./...   # обработчики — без PostgreSQL и HTTP
+
+docker run -d --name tasks-db -p 5432:5432 \
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=tasks \
   -v "$PWD/migrations:/docker-entrypoint-initdb.d:ro" postgres:16-alpine
 
 DB_PASSWORD=postgres go run ./cmd/main
 ```
 
 ```sh
-curl -X POST localhost:8080/api/v1/orders \
-  -H 'Authorization: Bearer ann' -H 'Content-Type: application/json' \
-  -d '{"item":"tea","qty":2}'
-# 201 {"order":{"id":"…","owner":"ann","item":"tea","qty":2,"created_at":"…"}}
+curl -X POST localhost:8080/api/v1/tasks -H 'Content-Type: application/json' -d '{"title":"write docs"}'
+# 201 {"task":{"id":"…","title":"write docs","done":false,"created_at":"…"}}
 
-curl -X POST localhost:8080/api/v1/orders -H 'Content-Type: application/json' -d '{"item":"tea","qty":2}'
-# 401 {"code":401,"status":"Unauthorized","kind":"unauthorized","message":"invalid token"}
+curl localhost:8080/api/v1/tasks/<id>
+# 200 {"id":"…","title":"write docs","done":false,"created_at":"…"}
 
-curl -X POST localhost:8080/api/v1/orders -H 'Authorization: Bearer ann' \
-  -H 'Content-Type: application/json' -d '{"item":"","qty":0}'
-# 400 {"code":400,…,"kind":"invalid","message":"invalid order","fields":{"item":"required","qty":"must be > 0"}}
+curl -X POST localhost:8080/api/v1/tasks -H 'Content-Type: application/json' -d '{"title":""}'
+# 400 {"code":400,"status":"Bad Request","kind":"invalid","message":"invalid task","fields":{"title":"required"}}
 
-curl localhost:8080/api/v1/orders/nope
-# 404 {"code":404,…,"kind":"not_found","message":"order not found"}
+curl localhost:8080/api/v1/tasks/nope
+# 404 {"code":404,"status":"Not Found","kind":"not_found","message":"task not found"}
 ```
 
 ## Что проверить
 
-- **Без `DB_PASSWORD`** проект не стартует и называет переменную: `services.orders.postgres.password: env var DB_PASSWORD is not set`.
-- **С выключенной базой** не стартует ни один App, а ошибка называет сервис: `init services: service "orders": init: …`.
+- **Без `DB_PASSWORD`** проект не стартует и называет переменную.
+- **С выключенной базой** не стартует ни один App, а ошибка называет сервис: `init services: service "repository": init: …`.
 - **По `Ctrl+C`** HTTP-сервер дообрабатывает текущие запросы, затем закрывается соединение с базой.
-- **Тест обработчика** проходит без базы и сервера: `go test ./...` — см. [тестирование обработчиков](/guide/handlers#тестирование).

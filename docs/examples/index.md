@@ -6,16 +6,16 @@
 
 ## taskapi — HTTP-сервис задач на PostgreSQL
 
-[examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi) — проект на gorock-kit `v0.5.0` и gorock-catalog `v0.5.0`: создать задачу и получить её по HTTP. Устроен так же, как проект из [Быстрого старта](/guide/getting-started), и проверен на PostgreSQL.
+[examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi) — проект на gorock-kit `v0.6.0` и gorock-catalog `v0.6.0`: создать задачу и получить её по HTTP. Устроен так же, как проект из [Быстрого старта](/guide/getting-started), и проверен на PostgreSQL.
 
 | Что показывает | Где |
 |---|---|
-| Ключи сервисов, регистрация, логгер — первым сервисом | `pkg/services/services.go`, `pkg/services/logger/` |
+| Каталог сервисов, порядок запуска, геттеры, логгер — первым сервисом | `pkg/services/services.go`, `pkg/services/logger/` |
 | Репозиторий поверх rockbun, не знающий о моделях | `pkg/services/repository/` |
 | Обработчики: параметры, проверка, результат, ошибки-виды | `internal/handlers/tasks/` |
-| Тесты обработчиков без PostgreSQL и HTTP — подделка в каталоге, `rockhandlers.Run` | `internal/handlers/tasks/*_test.go` |
+| Тесты обработчиков без PostgreSQL и HTTP — подделка в каталоге, `Chain(...).Call` | `internal/handlers/tasks/*_test.go` |
 | Общая обвязка: логирование отклонённых и упавших запросов | `internal/handlers/middleware/log.go` |
-| HTTP App rockhttp и привязка обработчиков к методам и путям | `cmd/apps/` |
+| Движок с HTTP App rockhttp и привязка цепочек к методам и путям | `cmd/apps/` |
 | Сборка: конфиг → сервисы → App → остановка в обратном порядке | `cmd/main/main.go` |
 | Единый конфиг с `${ENV:-default}` | `configs/configs.yaml` |
 

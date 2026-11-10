@@ -3,7 +3,7 @@
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockservices/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · Services
-Каталог сервисов: `pkg/services/services.go` объявляет типизированные ключи и регистрирует сервисы, Main открывает их до App и закрывает после, любой код получает сервис по ключу: `services.Orders.Get()`. → [Как писать Service](/guide/services)
+Каталог сервисов: `pkg/services/services.go` собирает `map` из названий и сервисов, запускает их в нужном порядке до App и закрывает после; любой код получает сервис через геттер, например `services.Repository()`. → [Как писать Service](/guide/services)
 :::
 
 ```sh
@@ -12,122 +12,113 @@ go get github.com/arzab/gorock-kit/rockservices@latest
 
 [Исходный код и README на GitHub](https://github.com/arzab/gorock-kit/tree/main/rockservices)
 
-Слой сервисов GOROCK-проекта: один каталог, который создаёт, хранит, выдаёт, открывает и закрывает все сервисы из `pkg/services`. Только стандартная библиотека.
+Слой сервисов GOROCK-проекта: каталог, в котором сервисы хранятся по названию и запускаются и останавливаются в том порядке, который вы задали. Только стандартная библиотека.
 
-Сервис — обёртка над технологией (база, кэш, брокер, внешний API, логгер) или над логикой (разбор файлов, генерация PDF), которой пользуется бизнес. Сервисы не зависят от apps: `cmd/main` открывает их до запуска apps и закрывает после.
+Сервис — обёртка над технологией (база, кэш, брокер, внешний API, логгер) или над логикой (разбор файлов, генерация PDF), которой пользуется бизнес. `cmd/main` поднимает сервисы до App и закрывает после.
 
-## Service
+## API
 
 ```go
 type Service interface {
     Init(ctx context.Context) error // открыть соединения
     Stop() error                    // освободить то, что открыл Init
 }
+
+func New(services map[string]Service) *Catalog
+func (c *Catalog) Get(name string) Service                         // паника, если сервиса нет
+func (c *Catalog) Init(ctx context.Context, names ...string) error // в этом порядке
+func (c *Catalog) Stop(names ...string) error                      // без имён — в обратном порядке Init
 ```
 
-Имени у сервиса нет: его имя — это **ключ**, под которым он зарегистрирован. Поэтому один и тот же сервис можно зарегистрировать дважды под двумя ключами.
+## Пакет services проекта
 
-```go
-// pkg/services/orders/interface.go
-type Service interface {
-    rockservices.Service
-    Insert(ctx context.Context, order any) error
-}
-
-// pkg/services/orders/service.go
-func NewService(cfg Configs) Service { return &service{cfg: cfg} } // без соединений
-```
-
-## Регистрация, запуск, использование
-
-Ключи и регистрация живут в одном файле — `pkg/services/services.go`. Ключ типизирован: тип сервиса записан один раз, в объявлении ключа, а `Add` сверяет с ним тип конструктора при компиляции.
+Каталог живёт в `pkg/services/services.go`. Там же — конфиги сервисов, порядок запуска и геттеры:
 
 ```go
 // pkg/services/services.go
-var (
-    Logger = rockservices.NewKey[logger.Service]("logger")
-    Orders = rockservices.NewKey[orders.Service]("orders")
+package services
+
+const (
+    LoggerName     = "logger"
+    RepositoryName = "repository"
 )
 
 type Configs struct {
-    Logger logger.Configs
-    Orders orders.Configs
+    Logger     logger.Configs
+    Repository repository.Configs
 }
 
-func Register(c *rockservices.Catalog, cfg Configs) {
-    rockservices.Add(c, Logger, logger.NewService, cfg.Logger) // порядок Add = порядок Init
-    rockservices.Add(c, Orders, orders.NewService, cfg.Orders)
+var catalog *rockservices.Catalog
+
+// Init создаёт сервисы из их конфигов и запускает в нужном порядке.
+func Init(ctx context.Context, cfg Configs) error {
+    catalog = rockservices.New(map[string]rockservices.Service{
+        LoggerName:     logger.NewService(cfg.Logger),
+        RepositoryName: repository.NewService(cfg.Repository),
+    })
+    return catalog.Init(ctx, LoggerName, RepositoryName) // логгер первым
 }
+
+// Stop останавливает сервисы в обратном порядке.
+func Stop() error { return catalog.Stop() }
+
+// Геттеры — по одному на сервис.
+func Repository() repository.Service { return catalog.Get(RepositoryName).(repository.Service) }
 ```
 
 ```go
 // cmd/main
-services.Register(rockservices.Default(), cfg.Services)
-if err := rockservices.Init(ctx); err != nil {
-    return err // ни один app не стартует
+if err := services.Init(ctx, cfg.Services); err != nil {
+    return err // ни один App не стартует
 }
-defer rockservices.Stop()
+defer services.Stop()
 
-engine := rockengine.NewEngine()
-apps.Register(engine, cfg.Apps)
-return engine.Run() // сервисы закроются после всех apps
+return apps.Run(ctx, cfg.Apps) // rockengine
 ```
 
 ```go
 // где угодно — обычно в обработчиках
-err := services.Orders.Get().Insert(ctx, order) // типизировано, без приведения
+err := services.Repository().Insert(ctx, task)
 ```
 
-**Забытая регистрация ловится при старте.** Каталог по умолчанию в `Init` проверяет, что каждый объявленный ключ добавлен, и называет пропущенные — проект не стартует, а не падает на первом запросе. Каталоги из `New()` эту проверку не делают: в тестах туда кладут только нужные подделки.
+## Дочерние сервисы
 
-## Зависимости между сервисами
-
-- **Сервис владеет дочерним** (репозиторий сам создаёт свой пул): ничего делать не нужно. Каталог видит только родителя, а тот сам открывает и закрывает дочерний.
-- **Общая зависимость** — тоже сервис в каталоге. Регистрируйте её раньше и передавайте в конструктор **значение, которое вернул `Add`**:
+- **Дочерний сервис, который родитель открывает сам** (репозиторий — свой пул соединений): создаётся и открывается внутри родителя, в каталоге его нет.
+- **Дочерний сервис, который открывается снаружи** — например, один пул на несколько сервисов: создайте его заранее, положите в каталог и передайте в конструктор родителя.
 
 ```go
-func Register(c *rockservices.Catalog, cfg Configs) {
-    pg := rockservices.Add(c, Postgres, postgres.NewService, cfg.Postgres)
-    rockservices.Add(c, Orders, func(cfg orders.Configs) orders.Service {
-        return orders.NewService(cfg, pg) // создан, но ещё не открыт — пользоваться с Init
-    }, cfg.Orders)
-}
+pg := postgres.NewService(cfg.Postgres)
+catalog = rockservices.New(map[string]rockservices.Service{
+    PostgresName:   pg,
+    RepositoryName: repository.NewService(cfg.Repository, pg),
+})
+return catalog.Init(ctx, PostgresName, RepositoryName) // сначала зависимость
 ```
-
-Не вызывайте `key.Get()` внутри конструктора: он читает каталог по умолчанию, а не тот, в который идёт регистрация. С `Register(rockservices.New(), cfg)` сервис получил бы чужую зависимость или панику. Пакет сервиса не знает, под каким ключом лежит его зависимость: всё связывание — в `services.go`.
-
-**Два экземпляра одного сервиса** — два ключа и две регистрации:
-
-```go
-rockservices.Add(c, OrdersDB, postgres.NewService, cfg.OrdersDB)
-rockservices.Add(c, AnalyticsDB, postgres.NewService, cfg.AnalyticsDB)
-```
-
-**Логгер — тоже сервис.** Регистрируйте его первым, чтобы остальные могли писать в лог уже в своём `Init`.
 
 ## Тестирование
 
-Бизнес-код вызывает `key.Get()`, а он читает каталог по умолчанию. В тесте соберите каталог с подделками и сделайте его каталогом по умолчанию:
+Для тестов пакет `services` проекта может дать функцию, которая подменяет каталог:
 
 ```go
-func TestCreateOrder(t *testing.T) {
-    c := rockservices.New()
-    rockservices.Add(c, services.Orders, func(struct{}) orders.Service { return &fakeOrders{} }, struct{}{})
-    prev := rockservices.SetDefault(c)
-    t.Cleanup(func() { rockservices.SetDefault(prev) })
-
-    // ... вызвать тестируемый обработчик
+// pkg/services/services.go
+func UseCatalog(c *rockservices.Catalog) (restore func()) {
+    prev := catalog
+    catalog = c
+    return func() { catalog = prev }
 }
+
+// тест обработчика
+t.Cleanup(services.UseCatalog(rockservices.New(map[string]rockservices.Service{
+    services.RepositoryName: &fakeRepository{},
+})))
 ```
 
-`SetDefault` — только для тестов; в рабочем коде `Default()` заполняет `services.Register`. Каталог по умолчанию один на процесс, поэтому тесты, которые его подменяют, **нельзя запускать с `t.Parallel()`**.
+Каталог один на пакет, поэтому тесты, которые его подменяют, нельзя запускать с `t.Parallel()`.
 
 ## Правила
 
-- Сервисы хранятся **по ключу**. `key.Get()` читает каталог по умолчанию, `key.From(c)` — указанный. Сервиса нет в каталоге — паника с именем (с каталогом по умолчанию после успешного `Init` такого не бывает).
-- `Init` каталога по умолчанию сначала проверяет, что все объявленные ключи добавлены, и называет пропущенные. Каталоги из `New()` не проверяют.
-- `Add` сразу вызывает конструктор. Паникует на nil-ключе, пустом или повторяющемся имени (в том числе у двух разных ключей), nil-сервисе, панике конструктора или вызове после `Init` — ошибки подключения видны при старте.
-- `Init` — в порядке добавления, один раз: повторный вызов возвращает `ErrAlreadyStarted`. Если один упал, уже открытые закрываются в обратном порядке, ошибка называет сервис.
-- `Stop` — в обратном порядке, собирает все ошибки, безопасен при повторном вызове, ограничен таймаутом (30s, `WithStopTimeout`), который называет зависший сервис.
+- `New` паникует на пустом имени или nil-сервисе.
+- `Get`, `Init` и `Stop` паникуют на неизвестном имени — до того, как что-то запустилось. Ошибка в названии видна при старте.
+- `Init` запускает сервисы в переданном порядке. Если один упал, уже запущенные этим вызовом останавливаются в обратном порядке, а ошибка называет сервис. Повторный `Init` того же сервиса — ошибка.
+- `Stop()` без имён останавливает все запущенные сервисы в обратном порядке `Init`; `Stop(names...)` — указанные, в указанном порядке. Не запущенные пропускаются, поэтому повторный `Stop` безопасен. Время ограничено (30s, `WithStopTimeout`), ошибка называет зависший сервис.
 - Паники в `Init`/`Stop` возвращаются как ошибки.
-- `rockservices.New()` — изолированный каталог (`key.From(c)`); `SetDefault` делает его каталогом по умолчанию в тестах.

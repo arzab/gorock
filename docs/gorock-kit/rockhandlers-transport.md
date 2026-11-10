@@ -4,216 +4,93 @@
 
 [Исходный файл на GitHub](https://github.com/arzab/gorock-kit/blob/main/rockhandlers/TRANSPORT_RU.md)
 
-Свой App пишется, когда готового для вашей технологии нет. App принимает запросы своего протокола (HTTP, очередь, gRPC, CLI, Telegram…) и отдаёт их маршрутам rockhandlers. Эталонная реализация — [rockhttp](/catalog/rockhttp); пример consumer'а очереди — ниже.
+Свой App пишется, когда готового для вашей технологии нет: очередь, gRPC, бот, CLI. App принимает обращения своего протокола и запускает цепочки обработчиков. Готовый пример — [rockhttp](/catalog/rockhttp).
 
 ## Кто за что отвечает
 
-| rockhandlers (уже сделано) | Транспорт (пишете вы) |
+| rockhandlers (уже сделано) | App (пишете вы) |
 |---|---|
-| цепочка: middleware → разбор → `Validate` → шаги | принять запрос/сообщение своего протокола |
-| перехват паник везде, включая ваш разбор | заполнить `Params` из запроса (функция `fill`) |
-| виды ошибок, `Canceled` / `Timeout` из контекста | превратить `Result` в ответ протокола |
-| Locals, middleware, `Timeout` | превратить **вид** ошибки в ответ протокола |
-| новый `Ctx` на каждый вызов, `Result` не утекает при ошибке | жизненный цикл App, остановка, параллельность, лимиты |
+| порядок: middleware → разбор → `Validate` → обработчики → `Normalize` | принять обращение |
+| перехват паник везде | разложить обращение в параметры (функция `fill`) |
+| виды ошибок, отмена и таймаут | превратить ответ и вид ошибки в ответ протокола |
+| | запуск, остановка, параллельность, лимиты |
 
-Не повторяйте в транспорте то, что уже есть в цепочке: свой `recover` вокруг `Serve`, валидацию, логирование ошибок маршрутов. Логирование — это middleware rockhandlers.
+Не повторяйте в App то, что уже есть: свой `recover`, проверку параметров, логирование ошибок обработчиков (это middleware).
 
-## Минимальный цикл
+## Главный цикл
 
 ```go
-result, err := route.Serve(ctx, func(params any) error {
-    return decode(req, params) // заполнить новый P из запроса
+response, err := pipeline.Run(ctx, func(params rockhandlers.Params) error {
+    return decode(req, params) // params — новая пустая структура параметров
 })
 if err != nil {
-    writeError(resp, err)      // по rockhandlers.KindOf(err)
+    writeError(resp, err) // по rockhandlers.KindOf(err)
     return
 }
-writeResult(resp, result)      // result — это R маршрута (указатель на структуру)
+writeResponse(resp, response)
 ```
 
-Всё остальное в этом руководстве — подробности этих трёх строк.
+## 1. Привязка цепочек
 
-## Шаг 1. Описание маршрутов и проверки на старте
-
-У каждого транспорта своя «точка монтирования»: у HTTP — метод и путь, у очереди — имя очереди, у CLI — команда. Опишите её структурой, в которой маршрут — обычное поле:
+У каждого App своя «точка входа»: у HTTP — метод и путь, у очереди — имя очереди, у CLI — команда. Опишите её структурой, где цепочка — обычное поле:
 
 ```go
 type Consumer struct {
-    Queue   string             // транспортные метаданные
-    Handler rockhandlers.Route // цепочка
+    Queue   string
+    Handler *rockhandlers.Pipeline
 }
 ```
 
-В `Init` App-а:
+В `Init` App-а проверьте описания и добавьте свои middleware: `pipeline.Use(a.middlewares...)` — один раз, при регистрации.
 
-- **Проверьте описания** (пустые поля, дубликаты) и верните ошибку — движок не запустит App.
-- **Добавьте middleware уровня App:** `route := c.Handler.With(a.mws...)`. Первый — самый внешний; каждый `With` оборачивает всё добавленное раньше. Делайте это один раз при регистрации, а не на каждый запрос.
-- **Проверьте типы**, если транспорт умеет не всё: `route.ResultType()` и `route.ParamsType()` возвращают `reflect.Type` указателей. Например, CLI, который печатает только текст, может отказать маршруту с `*rockhttp.File` — лучше упасть на старте, чем на запросе.
-- **Подготовьте разбор заранее**, если он дорогой: по `ParamsType()` можно один раз построить карту полей и тегов.
+## 2. Разбор обращения (`fill`)
 
-`Route` неизменяем, `Serve` можно вызывать параллельно из разных горутин.
+`fill` получает новую пустую структуру параметров и заполняет её.
 
-## Шаг 2. Разбор запроса (`fill`)
+- Выполняется внутри цепочки, после middleware. Поэтому middleware видят ошибки разбора, а таймаут покрывает и разбор.
+- Простая ошибка из `fill` превращается в «неверные данные» с сообщением `invalid request`. Подробность остаётся в причине, для логов.
+- Чтобы сказать клиенту точнее, верните `rockhandlers.Invalid("invalid JSON body")` или ошибку с полями. Пишите без имён Go-типов и структур.
+- Используйте те же теги, что `rockhttp`, где смысл совпадает: `json` — тело, `header` — заголовки (HTTP или сообщения), `path`, `query`, `form`. Тогда одни параметры работают в разных App.
 
-`fill` получает новый `P` — указатель на нулевую структуру — и заполняет его.
+## 3. Ответ
 
-**Где он выполняется.** Внутри цепочки: после middleware, перед `Validate`. Поэтому:
-- ошибки разбора видят middleware (логирование, метрики) — отдельный канал отчётов не нужен;
-- `Timeout` покрывает и разбор;
-- паника в `fill` становится `Internal`, а не роняет процесс;
-- если контекст уже отменён или middleware вернул ошибку или `rockhandlers.Done`, `fill` не выполнится.
+При успехе `response` — заполненная структура ответа. По умолчанию отправьте её в формате протокола. Особые типы ответа для своего протокола (как `rockhttp.File` и `rockhttp.Redirect`) объявите в пакете App и разберите через type switch.
 
-**Ошибки.**
-- Простая `error` из `fill` становится `Invalid` с общим сообщением «invalid request», а её текст остаётся в причине — для логов. Это безопасно, но расплывчато.
-- Чтобы сказать клиенту точнее, верните `*rockhandlers.Error` с понятным текстом без имён Go-типов и структур: `rockhandlers.Invalid("invalid JSON body")` или `rockhandlers.Invalid("invalid query").WithFields(map[string]string{"page": "must be a number"})`.
-- Чтобы задать вид и сообщение самому, верните `*rockhandlers.Error`: например, `rockhandlers.Unauthorized("bad signature")` при проверке подписи вебхука.
-- Ошибку ввода-вывода тела, если ничего нельзя сказать клиенту, оберните в `*rockhandlers.Error` с видом `KindInternal` — текст будет скрыт.
+## 4. Ошибки
 
-**Теги.** Используйте те же имена, что у rockhttp, где смысл совпадает, — тогда одна модель `Params` работает в нескольких транспортах:
+Переводите вид ошибки, а не саму ошибку:
 
-| Тег | HTTP | Очередь | CLI |
-|---|---|---|---|
-| `json:"x"` | JSON-тело | JSON-тело сообщения | JSON из stdin / флага |
-| `header:"X"` | заголовок | заголовок сообщения (AMQP headers, Kafka headers) | переменная окружения |
-| `query:"x"`, `path:"x"`, `form:"x"` | URL, путь, форма | — | флаги / аргументы |
-
-Обязательно поддержите **встроенные структуры**: переиспользуемые шаги (авторизация, тенант) получают данные через встроенную модель вроде `BearerAuth` с тегом `header:"Authorization"`.
-
-**Лимиты.** Ограничивайте размер тела в самом разборе (`http.MaxBytesReader` и аналоги) — шаги уже получают заполненную структуру.
-
-## Шаг 3. Результат
-
-При успехе `result` — это `R` маршрута, указатель на заполненную структуру.
-
-- **По умолчанию** сериализуйте его в формат протокола (JSON, protobuf…).
-- **Особые типы результата** — ваш способ выразить то, что умеет только ваш протокол: `*rockhttp.File` (поток файла), `*rockhttp.Redirect`. Объявите их в пакете транспорта и разбирайте через type switch перед сериализацией. Шаг, который их возвращает, честно привязан к транспорту — это нормально.
-- **Пустая структура** (`struct{}`) — договорённость «нечего отправлять»: HTTP отвечает 204, очередь просто подтверждает.
-- **Статус успеха и прочие метаданные ответа**, которые относятся к точке монтирования, держите в её описании (`Endpoint.Status`), а не в маршруте.
-- Если запись ответа сломалась после того, как его начало ушло клиенту, исправить уже ничего нельзя — сообщите через хук транспорта (`OnError` в rockhttp).
-
-## Шаг 4. Ошибки
-
-Переводите не саму ошибку, а её вид — `rockhandlers.KindOf(err)`:
-
-| Kind | HTTP | Очередь | CLI |
+| Вид | HTTP | Очередь | CLI |
 |---|---|---|---|
 | `KindNone` (успех) | 2xx | ack | 0 |
-| `Invalid` | 400 | reject → DLQ | 2 |
-| `Unauthorized` / `Forbidden` | 401 / 403 | reject → DLQ | 1 |
-| `NotFound` / `Conflict` | 404 / 409 | reject → DLQ | 1 |
-| `Unavailable` | 503 | requeue | 1 |
-| `Timeout` | 504 | requeue или DLQ | 1 |
-| `Canceled` | 499, без тела | requeue | 130 |
-| `Internal` | 500 | requeue с лимитом попыток | 1 |
+| `Invalid`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict` | 400 / 401 / 403 / 404 / 409 | в очередь недоставленных | 1–2 |
+| `Unavailable`, `Timeout` | 503 / 504 | повторить позже | 1 |
+| `Canceled` | 499, без тела | вернуть в очередь | 130 |
+| `Internal` | 500 | повторить с лимитом | 1 |
 
-Правила:
+- Клиенту — только `rockhandlers.MessageOf(err)`; для `Internal` она пустая, покажите общий текст.
+- `rockhandlers.FieldsOf(err)` — ошибки по полям, если протокол позволяет их передать.
+- `errors.Is(err, rockhandlers.ErrHandlerNotFound)` — цепочка ещё не написана: HTTP отвечает `501`.
+- `*rockhandlers.NormalizeError` — ответ не прошёл `Normalize`: это ошибка сервера.
 
-- **Текст для клиента — только `rockhandlers.MessageOf(err)`.** Для `Internal` она возвращает пустую строку: покажите общий текст («internal error»). Никогда не отдавайте клиенту `err.Error()` — там причины для логов.
-- **`rockhandlers.FieldsOf(err)`** — ошибки по полям; отдайте их, если протокол это позволяет (HTTP — в JSON, gRPC — в details).
-- **`Canceled` — не ошибка сервера**: клиент ушёл или приложение останавливается. Не пишите тело ответа, а в очереди верните сообщение (requeue), чтобы оно не потерялось.
-- **Неизвестные виды** (будущие версии) обрабатывайте как `Internal`.
-- Логировать ошибки маршрутов — работа middleware, не транспорта.
+## 5. Контекст и остановка
 
-## Шаг 5. Запасные выходы через контекст
+- Контекст обращения — из протокола (у HTTP — `r.Context()`) или из `Exec` App-а. Передайте его в `Run`.
+- Параллельность, лимиты и prefetch — забота App.
+- При остановке перестаньте принимать новое и дождитесь начатого.
 
-Если шагу нужно повлиять на ответ так, как не выражается результатом (cookie, заголовок ответа, приоритет сообщения), или прочитать сырой запрос, дайте функции, работающие через контекст:
+## 6. Тесты
 
-```go
-type exchangeKey struct{}
-
-type exchange struct {
-    req     *http.Request
-    cookies []*http.Cookie
-}
-
-// Транспорт: перед Serve.
-ctx = context.WithValue(ctx, exchangeKey{}, &exchange{req: r})
-
-// Публичное API транспорта: шаг вызывает rockhttp.SetCookie(c, cookie).
-func SetCookie(ctx context.Context, c *http.Cookie) {
-    if x, ok := ctx.Value(exchangeKey{}).(*exchange); ok {
-        x.cookies = append(x.cookies, c)
-    }
-}
-```
-
-`Ctx` шага — это `context.Context`, поэтому такие функции принимают его напрямую. Вне вызова транспорта они ничего не делают (или возвращают nil), поэтому шаги остаются тестируемыми через `rockhandlers.Run`. Применяйте накопленное при записи ответа — и успешного, и ошибки.
-
-## Шаг 6. Контекст, параллельность, остановка
-
-- **Контекст запроса** — из протокола (`r.Context()` у HTTP, отменяется при обрыве соединения) или из контекста `Exec` App-а для очереди. Передайте его в `Serve`: отмена дойдёт до шагов и до БД.
-- **Отмена кооперативная.** rockhandlers не бросает шаги в горутинах. Он прерывает цепочку между шагами, а внутри шага всё прерывается само, если шаг передаёт контекст в блокирующие вызовы.
-- **Параллельность — забота транспорта:** пул воркеров, prefetch, лимит одновременных запросов. Один `Ctx` не потокобезопасен, но каждый вызов `Serve` получает свой.
-- **Остановка.** При отмене контекста `Exec` перестаньте принимать новое и дождитесь сообщений в работе. Что делать с ними, если не успели, решает протокол: HTTP-сервер ждёт в пределах таймаута, очередь возвращает неподтверждённое. Контракт App — в [rockengine](/gorock-kit/rockengine).
-
-## Шаг 7. Тестирование транспорта
-
-Брокер для этого не нужен: соберите маршруты-заглушки и проверьте перевод.
+Брокер не нужен: соберите цепочки-заглушки и проверьте перевод видов ошибок.
 
 ```go
-func TestKindMapping(t *testing.T) {
-    type P struct{ ID string `json:"id"` }
-    type R struct{}
-    fail := func(err error) rockhandlers.Route {
-        return rockhandlers.Chain("t", func(*rockhandlers.Ctx[*P, *R]) error { return err })
-    }
-    cases := []struct {
-        route rockhandlers.Route
-        want  outcome
-    }{
-        {fail(nil), ack},
-        {fail(rockhandlers.Invalid("bad")), reject},
-        {fail(rockhandlers.Unavailable("down")), requeue},
-        {fail(errors.New("boom")), requeue},
-        {rockhandlers.Chain("p", func(*rockhandlers.Ctx[*P, *R]) error { panic("x") }), requeue},
-    }
-    for _, c := range cases {
-        if got := handle(c.route, message{Body: `{"id":"1"}`}); got != c.want {
-            t.Fatalf("got %v, want %v", got, c.want)
-        }
-    }
+type P struct{}
+func (*P) Validate() error { return nil }
+type R struct{}
+func (*R) Normalize() error { return nil }
+
+fail := func(err error) *rockhandlers.Pipeline {
+    return rockhandlers.Chain(func(*rockhandlers.Ctx, *P, *R) error { return err })
 }
+// fail(nil) → ack, fail(rockhandlers.Invalid("bad")) → reject, fail(errors.New("boom")) → requeue
 ```
-
-Проверьте отдельно:
-- ошибку разбора (`Invalid` с понятным текстом);
-- скрытие текста `Internal`;
-- `Canceled` на заранее отменённом контексте;
-- встроенные структуры в `Params`;
-- особые типы результата;
-- middleware App-а видят и ошибки разбора.
-
-## Пример: consumer очереди
-
-```go
-func (a *App) handle(ctx context.Context, msg *queue.Message) {
-    route := a.routes[msg.Queue] // подготовлены в Init: Handler.With(a.mws...)
-    _, err := route.Serve(ctx, func(params any) error {
-        if err := json.Unmarshal(msg.Body, params); err != nil {
-            return fmt.Errorf("invalid JSON body: %v", err) // → Invalid
-        }
-        return bindHeaders(msg.Headers, params) // теги header, включая встроенные структуры
-    })
-    switch rockhandlers.KindOf(err) {
-    case rockhandlers.KindNone:
-        msg.Ack()
-    case rockhandlers.KindUnavailable, rockhandlers.KindTimeout, rockhandlers.KindCanceled, rockhandlers.KindInternal:
-        msg.Requeue()
-    default:
-        msg.Reject() // плохое сообщение — повтор не поможет
-    }
-}
-```
-
-`Init`, `Exec` и `Stop` этого App-а — на странице [Как писать App](/guide/apps) документации GOROCK.
-
-## Чек-лист
-
-- [ ] Описание точки монтирования со своими метаданными и полем `Handler rockhandlers.Route`.
-- [ ] `Init`: проверка описаний, `With(mws...)` один раз, проверка `ResultType()`, если нужна.
-- [ ] Разбор только внутри `fill`; понятные тексты ошибок; `*Error` для своих видов; встроенные структуры; лимиты размера.
-- [ ] Результат: формат по умолчанию, особые типы, пустая структура.
-- [ ] Ошибки по `KindOf`; текст клиенту — только `MessageOf`, общий текст для `Internal`; `FieldsOf`; `Canceled` — не ошибка сервера.
-- [ ] Запасные выходы через контекст, без эффекта вне транспорта.
-- [ ] Контекст запроса передаётся в `Serve`; параллельность и остановка — на стороне App.
-- [ ] Тесты перевода видов, ошибок разбора, паник, отмены.
