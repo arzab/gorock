@@ -1,0 +1,24 @@
+name: examples
+
+on:
+  push:
+    branches: [main]
+    paths: ['examples/taskapi/**', '.github/workflows/examples.yml']
+  pull_request:
+    paths: ['examples/taskapi/**', '.github/workflows/examples.yml']
+
+jobs:
+  taskapi:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/taskapi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          check-latest: true
+          cache-dependency-path: examples/taskapi/go.sum
+      - run: go vet ./...
+      - run: go test ./...
