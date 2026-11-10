@@ -1,12 +1,12 @@
 # taskapi
 
-A GOROCK project on gorock-kit `v0.5.0` and gorock-catalog `v0.5.0`: create a task and get it over HTTP, tasks are stored in PostgreSQL.
+A GOROCK project on gorock-kit `v0.6.0` and gorock-catalog `v0.6.0`: create a task and get it over HTTP, tasks are stored in PostgreSQL.
 
 ```
-pkg/services/        services.go (keys, Configs, Register), logger, repository (PostgreSQL via rockbun)
+pkg/services/        services.go (catalog, Init/Stop, getters), logger, repository (PostgreSQL via rockbun)
 internal/handlers/   tasks/create.go, tasks/get.go (+ tests without HTTP and PostgreSQL), middleware/log.go
 internal/models/     task.go
-cmd/apps/            apps.go (HTTP App), http.go (which handler on which method and path)
+cmd/apps/            apps.go (engine with the HTTP App), http.go (which chain on which method and path)
 cmd/main/            main.go
 configs/             configs.yaml
 migrations/          001_tasks.sql

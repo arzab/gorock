@@ -3,7 +3,7 @@
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockhttp/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · App
-HTTP App на `net/http`: в `cmd/apps/http.go` вы привязываете обработчики к методам и путям (`Endpoint{Method, Path, Handler}`), он заполняет параметры и переводит итог в HTTP. Экспериментальный. → [Как писать App](/guide/apps)
+HTTP App на `net/http`: в `cmd/apps/http.go` вы привязываете цепочки к методам и путям (`Endpoint{Method, Path, Handler}`), он заполняет параметры и переводит итог в HTTP. Экспериментальный. → [Как писать App](/guide/apps)
 :::
 
 ```sh
@@ -18,14 +18,14 @@ HTTP-транспорт для [rockhandlers](/gorock-kit/rockhandlers) на `ne
 
 ```go
 server := rockhttp.New(cfg.HTTP,
-    rockhttp.Endpoint{Method: "POST", Path: "/shops/{shop}/orders", Handler: orders.Create, Status: http.StatusCreated},
-    rockhttp.Endpoint{Method: "GET", Path: "/orders/{id}", Handler: orders.Get},
-    rockhttp.Endpoint{Method: "GET", Path: "/files/{id}", Handler: files.Download}, // R = *rockhttp.File
+    rockhttp.Endpoint{Method: "POST", Path: "/tasks", Handler: tasks.Create, Status: http.StatusCreated},
+    rockhttp.Endpoint{Method: "GET", Path: "/tasks/{id}", Handler: tasks.Get},
+    rockhttp.Endpoint{Method: "GET", Path: "/files/{id}", Handler: files.Download}, // тип ответа *rockhttp.File
 ).Use(Log) // middleware rockhandlers вокруг всех эндпоинтов
 engine.MustRegister("http", server)
 ```
 
-`Handler` — это `rockhandlers.Route` (`rockhandlers.Chain(...)`): шаги ничего не знают про HTTP.
+`Handler` — цепочка `rockhandlers.Chain(обработчики...)`: обработчики ничего не знают про HTTP. Пустая цепочка (заготовка) отвечает `501 Not Implemented`.
 
 ## Params
 
@@ -41,15 +41,15 @@ engine.MustRegister("http", server)
 
 Порядок: JSON, form, query, header, path — следующий источник перезаписывает предыдущий. Неверный ввод → 400 с сообщением без имён Go-типов: `invalid JSON body`, `invalid query`, `invalid path`, `invalid header`, `invalid form` (поле — в `fields`, например `{"qty": "must be a number"}`) или `request body is larger than N bytes`.
 
-## Result
+## Ответ
 
-| Тип результата `R` | Ответ |
+| Тип ответа | HTTP-ответ |
 |---|---|
 | структура с полями | JSON; статус из `Endpoint.Status`, по умолчанию 200 |
 | пустая структура | 204 (или `Endpoint.Status`) |
 | `*rockhttp.File` | поток файла; Range и `If-Modified-Since`, если `Content` — `io.ReadSeeker`; `Download: true` → attachment |
 | `*rockhttp.Redirect` | редирект, по умолчанию 302 |
-| ошибка | `ErrorBody{code, status, kind, message, fields}`; сообщения Internal скрыты |
+| ошибка | `ErrorBody{code, status, kind, message, fields}`; сообщения Internal скрыты; цепочка без обработчиков → 501 |
 
 Вид ошибки → HTTP-статус:
 
@@ -67,7 +67,7 @@ engine.MustRegister("http", server)
 
 Это соответствие отдаёт функция `StatusOf`.
 
-То, что не выражается типизированным результатом, — через контекст:
+То, что не выражается типизированным ответом, — через контекст:
 - `rockhttp.SetCookie(c, cookie)`;
 - `rockhttp.SetHeader(c, k, v)`;
 - `rockhttp.Request(c)` — сырой запрос, запасной выход.

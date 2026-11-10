@@ -7,8 +7,6 @@ import (
 	"os"
 
 	"github.com/arzab/gorock-kit/rockconfig"
-	"github.com/arzab/gorock-kit/rockengine"
-	"github.com/arzab/gorock-kit/rockservices"
 
 	"__MODULE__/cmd/apps"
 	"__MODULE__/pkg/services"
@@ -36,17 +34,15 @@ func Exec() error {
 		return fmt.Errorf("init configs: %w", err)
 	}
 
-	services.Register(rockservices.Default(), cfg.Services)
-	if err := rockservices.Init(context.Background()); err != nil {
-		return fmt.Errorf("init services: %w", err)
+	ctx := context.Background()
+	if err := services.Init(ctx, cfg.Services); err != nil {
+		return fmt.Errorf("init services: %w", err) // no App starts
 	}
 	defer func() {
-		if err := rockservices.Stop(); err != nil {
+		if err := services.Stop(); err != nil {
 			log.Print(err)
 		}
 	}()
 
-	engine := rockengine.NewEngine()
-	apps.Register(engine, cfg.Apps)
-	return engine.Run()
+	return apps.Run(ctx, cfg.Apps)
 }

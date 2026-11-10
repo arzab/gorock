@@ -3,13 +3,13 @@ module github.com/arzab/gorock/examples/taskapi
 go 1.26.0
 
 require (
-	github.com/arzab/gorock-catalog/rockbun v0.5.0
-	github.com/arzab/gorock-catalog/rockhttp v0.5.0
-	github.com/arzab/gorock-catalog/rocklog v0.5.0
-	github.com/arzab/gorock-kit/rockconfig v0.5.0
-	github.com/arzab/gorock-kit/rockengine v0.5.0
-	github.com/arzab/gorock-kit/rockhandlers v0.5.0
-	github.com/arzab/gorock-kit/rockservices v0.5.0
+	github.com/arzab/gorock-catalog/rockbun v0.6.0
+	github.com/arzab/gorock-catalog/rockhttp v0.6.0
+	github.com/arzab/gorock-catalog/rocklog v0.6.0
+	github.com/arzab/gorock-kit/rockconfig v0.6.0
+	github.com/arzab/gorock-kit/rockengine v0.6.0
+	github.com/arzab/gorock-kit/rockhandlers v0.6.0
+	github.com/arzab/gorock-kit/rockservices v0.6.0
 	github.com/google/uuid v1.6.0
 	github.com/uptrace/bun v1.3.0
 )

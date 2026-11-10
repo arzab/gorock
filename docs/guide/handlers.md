@@ -1,112 +1,100 @@
 # Как писать Handler
 
-Обработчик — бизнес-логика запроса: что проверить, какие сервисы вызвать, что вернуть. Он получает заполненные параметры и возвращает результат или типизированную ошибку, а как к нему пришли и как будет выглядеть ответ, не знает. Зачем так — на странице [Архитектура](/architecture/#_2-handlers). Механизм — модуль [rockhandlers](/gorock-kit/rockhandlers).
+Обработчик — бизнес-логика запроса: что проверить, какие сервисы вызвать, что вернуть. Устроен как во Fiber, только без привязки к HTTP: одна и та же цепочка работает в HTTP, очереди и по расписанию. Зачем так — на странице [Архитектура](/architecture/#_2-handlers). Модуль — [rockhandlers](/gorock-kit/rockhandlers).
+
+Код ниже — из примера [taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi).
 
 ```
 internal/handlers/
-├── orders/
-│   ├── create.go          параметры, результат, шаги, var Create
+├── tasks/
+│   ├── create.go          параметры, ответ, обработчики, var Create
 │   ├── create_test.go
 │   └── get.go
-├── steps/                 общие шаги: авторизация, тенант…
-│   └── auth.go
-└── middleware/            общая обвязка всех обработчиков
-    └── log.go
+└── middleware/
+    └── log.go             общая обвязка всех цепочек
 ```
-
-Одно действие — один файл. Большое действие можно разложить в папку.
 
 ---
 
 ## 1. Параметры — всё, что пришло
 
 ```go
-// internal/handlers/orders/create.go
+// internal/handlers/tasks/create.go
 type CreateParams struct {
-    steps.BearerAuth        // токен — для шага авторизации
-    Item             string `json:"item"`
-    Qty              int    `json:"qty"`
+    Title string `json:"title"`
 }
-```
 
-В параметрах всё, что нужно обработчику:
-- данные от клиента — тело запроса;
-- метаданные запроса — заголовки, идентификатор из пути, параметры строки запроса.
-
-Теги говорят App, откуда взять поле: `json` — тело, `header` — заголовок, `path` — часть пути, `query` — строка запроса, `form` — форма и файлы. Обработчику это безразлично: к нему структура приходит уже заполненной.
-
-## 2. Проверка — до всех шагов
-
-```go
+// Validate выполняется до всех обработчиков: сначала проверяем, потом используем.
 func (p *CreateParams) Validate() error {
-    fields := map[string]string{}
-    if strings.TrimSpace(p.Item) == "" {
-        fields["item"] = "required"
-    }
-    if p.Qty <= 0 {
-        fields["qty"] = "must be > 0"
-    }
-    if len(fields) > 0 {
-        return rockhandlers.Invalid("invalid order").WithFields(fields)
+    if strings.TrimSpace(p.Title) == "" {
+        return rockhandlers.Invalid("invalid task").WithFields(map[string]string{"title": "required"})
     }
     return nil
 }
 ```
 
-Если у параметров есть метод `Validate`, он выполняется сразу после заполнения, до первого шага. Сначала проверяем, потом используем. Ошибки по полям (`WithFields`) App отдаст клиенту — у HTTP это поле `fields` в JSON.
+Параметры заполняет App: из тела запроса, заголовков, пути, сообщения. Теги говорят, откуда взять поле: `json` — тело, `header` — заголовок, `path` — часть пути, `query` — строка запроса, `form` — форма и файлы.
 
-## 3. Результат — что вернуть
+`Validate` обязателен. Обычная ошибка из него становится «неверными данными» с её текстом, а `rockhandlers.Invalid(...)` с полями проходит как есть.
+
+## 2. Ответ — что вернуть
 
 ```go
-type CreateResult struct {
-    Order *models.Order `json:"order"`
+type CreateResponse struct {
+    Task *models.Task `json:"task"`
 }
+
+// Normalize выполняется после цепочки, если ошибок не было.
+func (r *CreateResponse) Normalize() error { return nil }
 ```
 
-Результат создан заранее, шаги его заполняют. App отправит его клиенту в формате своей технологии — у HTTP это JSON. Если отправлять нечего, результат — пустая структура: HTTP ответит `204`.
+Ответ создан заранее, обработчики его заполняют. App отправит его в формате своей технологии — у HTTP это JSON. `Normalize` — последний шанс привести ответ в порядок или отказаться отдавать его: ошибка из него приходит в App как `*rockhandlers.NormalizeError`.
 
-## 4. Шаги — что сделать
+## 3. Обработчики и цепочка
+
+Обработчик получает всё аргументами, как в `net/http`:
 
 ```go
-type CreateCtx = rockhandlers.Ctx[*CreateParams, *CreateResult] // короткое имя для сигнатур
-
-// Create: проверить токен → создать заказ.
-var Create = rockhandlers.Chain("orders.create", steps.Bearer, create)
-
-func create(c *CreateCtx) error {
-    order := &models.Order{
-        ID:    uuid.NewString(),
-        Owner: steps.UserKey.MustGet(c), // положил шаг Bearer
-        Item:  c.Params.Item,
-        Qty:   c.Params.Qty,
+func create(c *rockhandlers.Ctx, params *CreateParams, response *CreateResponse) error {
+    task := &models.Task{ID: uuid.NewString(), Title: strings.TrimSpace(params.Title), CreatedAt: time.Now().UTC()}
+    if err := services.Repository().Insert(c, task); err != nil {
+        return fmt.Errorf("insert task: %w", err) // непредвиденное: 500, текст скрыт
     }
-    if err := services.Orders.Get().Insert(c, order); err != nil {
-        return fmt.Errorf("insert order: %w", err)
-    }
-    c.Result.Order = order
+    response.Task = task
     return nil
 }
+
+var Create = rockhandlers.Chain(create)
 ```
 
-- **`rockhandlers.Chain(имя, шаги...)`** собирает обработчик из шагов. Имя попадает в логи и метрики.
-- **Шаг, вернувший `nil`, передаёт управление следующему сам** — вызывать `c.Next()` не обязательно. Вызывайте его, когда нужно выполнить код после остальной цепочки.
-- **Ранний успешный выход — `return rockhandlers.Done`.** Следующие шаги не выполняются, а клиент получает уже заполненный результат. Например, ответ из кэша:
+Цепочка — как во Fiber:
+- **`return nil`** — цепочка закончилась без ошибок;
+- **`return c.Next()`** — запустить следующий обработчик и вернуть его результат;
+- **`return err`** — цепочка остановилась, ошибку получает App;
+- **`c.Next()` после последнего обработчика** вернёт `rockhandlers.ErrHandlerNotFound`, поэтому последний возвращает `nil`.
 
-  ```go
-  func fromCache(c *rockhandlers.Ctx[*GetParams, *models.Order]) error {
-      if order, ok := cache.Get(c.Params.ID); ok {
-          *c.Result = order
-          return rockhandlers.Done // остальные шаги не нужны
-      }
-      return nil // дальше — загрузка из базы
-  }
-  ```
+Несколько обработчиков:
+
+```go
+func checkAuth(c *rockhandlers.Ctx, params *CreateParams, _ *CreateResponse) error {
+    if params.Token == "" {
+        return rockhandlers.Unauthorized("token required")
+    }
+    c.Set(userKey{}, params.Token) // значение для следующих обработчиков
+    return c.Next()
+}
+
+var Create = rockhandlers.Chain(checkAuth, create)
+```
+
+- **`Chain` выводит типы параметров и ответа из обработчиков.** Обработчик с другими типами — ошибка компиляции.
+- **Цепочку можно создать пустой** (`rockhandlers.Chain[*CreateParams, *CreateResponse]()`) — как заготовку: HTTP ответит `501 Not Implemented`.
 - **`c` — это `context.Context` запроса.** Передавайте его в сервисы, и отмена запроса дойдёт до базы.
-- **Шаги передают друг другу данные через типизированные значения:** `UserKey.Set(c, user)` в одном шаге, `UserKey.MustGet(c)` в следующем.
+- **Значения между обработчиками** — `c.Set(key, v)` и `c.Get(key)`.
 
-## 5. Ошибки — что случилось
+## 4. Ошибки — что случилось
 
-Обработчик говорит, **что** случилось, а App решает, как это выглядит для клиента:
+Обработчик говорит, **что** случилось, а App решает, как это выглядит:
 
 | Ошибка | Когда | HTTP | Очередь |
 |---|---|---|---|
@@ -121,102 +109,85 @@ func create(c *CreateCtx) error {
 Ошибки сервисов переводите в бизнес-ошибки там, где это решение:
 
 ```go
-// internal/handlers/orders/get.go
-var Get = rockhandlers.Chain("orders.get", get)
+// internal/handlers/tasks/get.go
+type GetParams struct {
+    ID string `path:"id"`
+}
 
-func get(c *rockhandlers.Ctx[*GetParams, *models.Order]) error {
-    err := services.Orders.Get().GetByID(c, c.Result, c.Params.ID)
-    if errors.Is(err, ordersvc.ErrNotFound) {
-        return rockhandlers.NotFound("order not found")
+func (p *GetParams) Validate() error { return nil }
+
+type GetResponse struct {
+    models.Task // поля задачи — тело ответа
+}
+
+func (r *GetResponse) Normalize() error { return nil }
+
+var Get = rockhandlers.Chain(get)
+
+func get(c *rockhandlers.Ctx, params *GetParams, response *GetResponse) error {
+    err := services.Repository().GetByID(c, &response.Task, params.ID)
+    if errors.Is(err, repository.ErrNotFound) {
+        return rockhandlers.NotFound("task not found")
     }
-    return err // непредвиденное — текст увидит лог, а не клиент
+    return err
 }
 ```
 
 ---
 
-## Общие шаги
+## Middleware
 
-Проверка, нужная многим обработчикам, пишется один раз. Если шагу нужны данные запроса, он требует их через интерфейс, а параметры обработчика выполняют требование встраиванием:
-
-```go
-// internal/handlers/steps/auth.go
-type BearerAuth struct {
-    Authorization string `header:"Authorization" json:"-"`
-}
-
-func (a *BearerAuth) BearerToken() string { return strings.TrimPrefix(a.Authorization, "Bearer ") }
-
-type TokenParams interface{ BearerToken() string }
-
-var UserKey = rockhandlers.NewLocal[string]("user")
-
-func Bearer[P TokenParams, R any](c *rockhandlers.Ctx[P, R]) error {
-    user, ok := verify(c.Params.BearerToken())
-    if !ok {
-        return rockhandlers.Unauthorized("invalid token")
-    }
-    UserKey.Set(c, user)
-    return c.Next()
-}
-```
-
-Шаг `Bearer` ставится в любую цепочку, параметры которой встраивают `BearerAuth`. Если забыть встроить, код не соберётся. Приведений типов нет.
-
-**Группы** — обычные функции, которые добавляют общие шаги:
-
-```go
-func Secured[P steps.TokenParams, R any](name string, s ...rockhandlers.Handler[P, R]) rockhandlers.Route {
-    return rockhandlers.Chain(name, rockhandlers.Prepend(s, steps.Bearer[P, R])...)
-}
-```
-
-## Общая обвязка (middleware)
-
-То, что нужно всем обработчикам и не смотрит в параметры — логирование, метрики, ограничение времени, — пишется как middleware и вешается на App один раз:
+Middleware — тот же обработчик, только с общими интерфейсами вместо конкретных структур, потому что он стоит перед любыми цепочками:
 
 ```go
 // internal/handlers/middleware/log.go
-func Log(c rockhandlers.Context) error {
+func Log(c *rockhandlers.Ctx, _ rockhandlers.Params, _ rockhandlers.Response) error {
     err := c.Next()
     if err == nil {
         return nil
     }
     switch kind := rockhandlers.KindOf(err); kind {
     case rockhandlers.KindInternal, rockhandlers.KindUnavailable, rockhandlers.KindTimeout:
-        rocklog.Error("request failed", rocklog.Str("handler", c.Route()), rocklog.Str("kind", kind.String()), rocklog.Err(err))
+        rocklog.FromContext(c).Error("request failed", rocklog.Str("kind", kind.String()), rocklog.Err(err))
     default:
-        rocklog.Warn("request rejected", rocklog.Str("handler", c.Route()), rocklog.Str("kind", kind.String()), rocklog.Err(err))
+        rocklog.FromContext(c).Warn("request rejected", rocklog.Str("kind", kind.String()), rocklog.Err(err))
     }
     return err
 }
 ```
 
-Ошибки разбора запроса тоже проходят через middleware. Клиенту они приходят без имён Go-типов: `invalid JSON body`, `invalid query`, `invalid path` с полем в `fields`, а подробность декодера остаётся в причине — для логов. Ограничение времени — `rockhandlers.Timeout(5*time.Second)`. Для одного обработчика: `Create.With(rockhandlers.Timeout(2*time.Second))`.
+Его вешают на App: `rockhttp.New(cfg, endpoints...).Use(middleware.Log)`. На одну цепочку — `tasks.Create.Use(rockhandlers.Timeout(2*time.Second))`. Middleware видит и ошибки разбора и проверки параметров. Клиенту они приходят без имён Go-типов: `invalid JSON body`, `invalid path` с полем в `fields`.
 
 ---
 
 ## Тестирование
 
-Обработчик вызывается напрямую — без сервера, с подделкой сервиса в каталоге ([как подменить](/guide/services#тестирование)):
+Цепочка вызывается напрямую — без сервера, с подделкой сервиса ([как подменить](/guide/services#тестирование)):
 
 ```go
-res, err := rockhandlers.Run[*orders.CreateResult](context.Background(), orders.Create, &orders.CreateParams{
-    BearerAuth: steps.BearerAuth{Authorization: "Bearer ann"},
-    Item:       "tea",
-    Qty:        2,
-})
+func TestCreate(t *testing.T) {
+    fake := useFake(t)
+
+    res, err := tasks.Create.Call(context.Background(), &tasks.CreateParams{Title: " write docs "})
+    if err != nil {
+        t.Fatal(err)
+    }
+    task := res.(*tasks.CreateResponse).Task
+    if task.Title != "write docs" || fake.tasks[task.ID] == nil {
+        t.Fatalf("result %+v", task)
+    }
+}
 ```
 
-`Run` проходит всю цепочку: проверку параметров, шаги, middleware.
+`Call` проходит всё то же, что запрос из App: `Validate`, обработчики, `Normalize`.
 
 ---
 
 ## Чего не делать
 
 - **Не разбирать запрос в обработчике.** Всё входящее — поля параметров с тегами.
-- **Не возвращать статус-коды и не писать ответ.** Только результат или ошибку с видом.
-- **Не приводить параметры к интерфейсам в шагах.** Требования — через ограничения типа и встраивание.
-- **Не делать гигантский шаг.** Каждый шаг — одно дело.
+- **Не возвращать статус-коды и не писать ответ.** Только заполненный ответ или ошибку с видом.
+- **Не вызывать `c.Next()` в последнем обработчике.** Цепочку завершает `return nil`.
+- **Не делать гигантский обработчик.** Каждый — одно дело.
 
 → Дальше: [Как писать App](/guide/apps) · API: [rockhandlers](/gorock-kit/rockhandlers)

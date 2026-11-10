@@ -3,7 +3,7 @@
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockhandlers/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · Handlers
-Обработчики в `internal/handlers`: цепочки шагов, параметры и результат, ошибки с видом, общие шаги, middleware — без привязки к технологии. App заполняет параметры и переводит итог на свой язык. → [Как писать Handler](/guide/handlers)
+Обработчики в `internal/handlers`: цепочки в стиле Fiber — `func(c, params, response) error`, `c.Next()`, `Validate`/`Normalize`, ошибки с видом, middleware. App заполняет параметры и переводит итог на свой язык. → [Как писать Handler](/guide/handlers)
 :::
 
 ```sh
@@ -12,163 +12,146 @@ go get github.com/arzab/gorock-kit/rockhandlers@latest
 
 [Исходный код и README на GitHub](https://github.com/arzab/gorock-kit/tree/main/rockhandlers)
 
-Форма обработки запроса, не зависящая от технологии. Это то, что во Fiber дают `Ctx`, `Next`, `Locals`, обработчик ошибок и recover, только одинаково для HTTP, очередей, CLI и чего угодно. Без зависимостей.
+Слой обработчиков GOROCK-проекта: бизнес-логика как цепочка обработчиков — как во Fiber, только без привязки к HTTP. Одну и ту же цепочку запускает HTTP-сервер, consumer очереди или cron. Только стандартная библиотека.
 
-```
-транспорт (HTTP, очередь…)        rockhandlers                         Realm
-заполняет Params        ──▶  middleware → шаг 1 → шаг 2 … ──▶  сервисы / сценарии
-переводит Result/ошибку ◀──  Result или ошибка с видом (Kind)
-```
+## Обработчик
 
-Слой отвечает за цепочку, `Next`, Locals, перехват паники, виды ошибок и отмену. Транспорт — за протокол:
-- заполнить `Params`: тело, заголовки, path, AMQP-заголовки, флаги…;
-- превратить `Result` в ответ: JSON, файл, редирект, ack, stdout…;
-- перевести вид ошибки в протокол: статус, nack, код выхода.
-
-## Шаги и цепочки
+Всё нужное приходит аргументами, как в `net/http`:
 
 ```go
-type CreateParams struct {
-    auth.BearerAuth          // встроенная модель → шаг auth.Bearer принимает эти параметры
-    Item string `json:"item"`
-    Qty  int    `json:"qty"`
-}
-type CreateResult struct{ ID string `json:"id"` }
+type Handler[P Params, R Response] func(c *Ctx, params P, response R) error
+```
 
-func Create(c *rockhandlers.Ctx[*CreateParams, *CreateResult]) error {
-    id, err := orders.Create(c, c.Params.Item, c.Params.Qty) // c — это context.Context
-    if err != nil {
-        return err
+- `Params` — то, что пришло: тело, заголовки, путь. Заполняет App. Обязан уметь `Validate() error`.
+- `Response` — то, что вернём: заполняют обработчики. Обязан уметь `Normalize() error`.
+- `Ctx` — контекст запроса (`context.Context`) с `Next()` и значениями `Set`/`Get`.
+
+```go
+// internal/handlers/tasks/create.go
+type CreateParams struct {
+    Token string `header:"Authorization"`
+    Title string `json:"title"`
+}
+
+func (p *CreateParams) Validate() error {
+    if strings.TrimSpace(p.Title) == "" {
+        return rockhandlers.Invalid("invalid task").WithFields(map[string]string{"title": "required"})
     }
-    c.Result.ID = id
     return nil
 }
 
-var CreateOrder = rockhandlers.Chain("orders.create", auth.Bearer, Create)
-```
-
-Длинную сигнатуру шага можно сократить псевдонимом типа рядом с моделью — это тот же тип, в рантайме он ничего не стоит:
-
-```go
-type CreateCtx = rockhandlers.Ctx[*CreateParams, *CreateResult]
-
-func Create(c *CreateCtx) error { … }
-```
-
-- `Ctx[P, R]` хранит типизированные `Params` и `Result`. `Params` заполняет транспорт, `Result` создаётся до цепочки, и его заполняют шаги. P и R — указатели на структуры.
-- Шаг, вернувший `nil`, передаёт управление следующему — вызывать `c.Next()` не обязательно. Вызывайте его, когда нужно выполнить код после остальной цепочки.
-- Чтобы успешно закончить цепочку раньше (например, при попадании в кэш), верните `rockhandlers.Done`: оставшиеся шаги пропускаются, внешние middleware получают `nil`, результат возвращается. Middleware, вернувший `Done` до шагов, пропускает и валидацию, и шаги.
-- Повторный `Next()` возвращает результат первого вызова. `Next()` после последнего шага возвращает nil.
-- Если `Params` реализует `Validate() error`, валидация выполняется после того, как транспорт заполнил `Params`, и перед первым шагом: сначала проверка, потом использование. Простая ошибка из неё становится `Invalid`.
-- `Chain` стирает дженерики. `Route` — обычное значение, поэтому маршруты разных типов лежат в одном слайсе.
-
-## Переиспользуемые шаги: ограничения вместо приведений
-
-Шаг, которому нужны данные запроса, объявляет требование интерфейсом, а компилятор проверяет, что модель его выполняет:
-
-```go
-type Params interface{ BearerToken() string }
-
-func Bearer[P Params, R any](c *rockhandlers.Ctx[P, R]) error {
-    user, err := verify(c, c.Params.BearerToken())
-    if err != nil {
-        return rockhandlers.Unauthorized("invalid token")
-    }
-    UserKey.Set(c, user)
-    return c.Next()
+type CreateResponse struct {
+    Task *models.Task `json:"task"`
 }
+
+func (r *CreateResponse) Normalize() error { return nil }
+
+func checkAuth(c *rockhandlers.Ctx, params *CreateParams, _ *CreateResponse) error {
+    if params.Token == "" {
+        return rockhandlers.Unauthorized("token required")
+    }
+    return c.Next() // дальше
+}
+
+func create(c *rockhandlers.Ctx, params *CreateParams, response *CreateResponse) error {
+    task := &models.Task{ID: uuid.NewString(), Title: params.Title}
+    if err := services.Repository().Insert(c, task); err != nil {
+        return err
+    }
+    response.Task = task
+    return nil // готово
+}
+
+var Create = rockhandlers.Chain(checkAuth, create)
 ```
 
-Модели выполняют требование встраиванием — как `auth.BearerAuth` выше. Забыли встроить — код не соберётся. `Chain` выводит P и R из конкретного шага и подставляет эти типы в дженерик-шаги.
+`Chain` выводит типы параметров и ответа из обработчиков. Обработчик с другими типами — ошибка компиляции.
+
+## Цепочка — как во Fiber
+
+- `return nil` — цепочка закончилась без ошибок.
+- `return c.Next()` — запустить следующий обработчик и вернуть его результат.
+- `return err` — цепочка остановилась, ошибку получает App.
+- `c.Next()`, когда обработчиков больше нет, возвращает `ErrHandlerNotFound`. Поэтому последний обработчик возвращает `nil`.
+
+Цепочку можно создать пустой — заготовкой. Тогда запуск вернёт `ErrHandlerNotFound`, а HTTP-сервер ответит `501 Not Implemented`.
+
+## Порядок запуска
+
+App вызывает `pipeline.Run(ctx, fill)`. Порядок:
+
+1. **middleware;**
+2. **`fill`** — App раскладывает запрос в параметры;
+3. **`params.Validate()`;**
+4. **обработчики;**
+5. **`response.Normalize()`** — только если ошибок не было.
+
+| Что пошло не так | Что получает App |
+|---|---|
+| простая ошибка из `fill` | «неверные данные» с сообщением `invalid request`; подробность остаётся в причине — для логов |
+| простая ошибка из `Validate` | «неверные данные» с её текстом |
+| `rockhandlers.Invalid(...)` и другие виды | как есть |
+| паника где угодно | «непредвиденное» с `*PanicError` |
+| ошибка из `Normalize` | `*NormalizeError` (распознаётся через `errors.As`) |
 
 ## Middleware
 
-Для сквозной логики, которая не смотрит в данные запроса: логирование, метрики, трейсинг, таймауты, обработка ошибок.
+Middleware — тот же обработчик, только с общими интерфейсами вместо конкретных структур, потому что он висит на любых цепочках:
 
 ```go
-func Log(c rockhandlers.Context) error {
+type Middleware = Handler[Params, Response]
+
+func Log(c *rockhandlers.Ctx, _ rockhandlers.Params, _ rockhandlers.Response) error {
     err := c.Next()
-    if err != nil { /* лог, метрика, переклассификация */ }
+    if err != nil {
+        rocklog.Error("request failed", rocklog.Err(err))
+    }
     return err
 }
 
-route = route.With(Log, rockhandlers.Timeout(5*time.Second))
+Create.Use(Log, rockhandlers.Timeout(5*time.Second))
 ```
 
-`With` оборачивает маршрут:
-- первый middleware — самый внешний, а каждый следующий вызов `With` оборачивает всё, что добавили раньше. Так же транспорт добавляет свои middleware уровня приложения — через `route.With(...)` при регистрации;
-- порядок выполнения: middleware транспорта → `With` → разбор запроса (заполнение от транспорта) → валидация → шаги;
-- `c.SetContext(ctx)` заменяет контекст на остаток запроса.
+`Use` ставит middleware перед цепочкой. Каждый следующий `Use` встаёт перед предыдущими, поэтому App добавляет свои middleware при регистрации, и они выполняются первыми.
 
-## Группы
-
-Группа — обычная дженерик-функция в вашем коде: у методов в Go не бывает своих параметров типа.
+## Значения запроса
 
 ```go
-func Admin[P auth.Params, R any](name string, steps ...rockhandlers.Handler[P, R]) rockhandlers.Route {
-    return rockhandlers.Chain(name, rockhandlers.Prepend(steps, auth.Bearer[P, R], admin.Require[P, R])...).
-        With(Log)
-}
-
-var BanUser = Admin("users.ban", users.Ban)
-```
-
-## Locals
-
-```go
-var UserKey = rockhandlers.NewLocal[*User]("user")
-
-UserKey.Set(c, u)
-u, ok := UserKey.Get(c)  // *User, без приведения
-u := UserKey.MustGet(c)  // паника (→ Internal), если нет шага, который кладёт значение
+c.Set(userKey{}, user)  // в одном обработчике
+v, ok := c.Get(userKey{}) // в следующем
 ```
 
 ## Ошибки
 
 - **Конструкторы:** `Invalid`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `Unavailable`.
-- **Детали:** `.WithFields(map)` добавляет ошибки по полям; `.Wrap(err)` — причину, только для логов.
+- **Детали:** `.WithFields(map)` — ошибки по полям; `.Wrap(err)` — причина, только для логов.
 - **`KindOf(err)`:**
   - nil → `KindNone`;
   - `*Error` → его вид;
   - `context.Canceled` → `KindCanceled`;
   - `context.DeadlineExceeded` → `KindTimeout`;
   - всё остальное → `KindInternal`.
-- **`MessageOf`** отдаёт сообщение для клиента и скрывает сообщения Internal. **`FieldsOf`** отдаёт ошибки по полям.
-- **Паники:** паника в любом месте цепочки становится ошибкой Internal с `*PanicError{Value, Stack}`. Middleware видят её как обычную ошибку.
+- **`MessageOf`** скрывает текст `Internal`; **`FieldsOf`** отдаёт ошибки по полям.
 
 ## Отмена
 
-Модель нативная для Go и кооперативная. `Ctx` — это `context.Context`: передавайте его в БД, клиенты и каналы, и они вернутся сразу после отмены. `Next` не запускает следующие шаги, если контекст уже завершён.
-
-Логика «при отмене» — из стандартной библиотеки:
-- `defer` — уборка;
-- `context.AfterFunc(c, fn)` — немедленная реакция на сигнал;
-- `context.WithoutCancel(c)` — работа, которая должна завершиться вопреки отмене.
-
-## Для транспортов
-
-```go
-result, err := route.Serve(ctx, func(params any) error {
-    return decode(req, params) // заполнить новый P из запроса
-})                             // не паникует; при ошибке result == nil
-// err → протокол по KindOf(err); result (R) → протокол
-```
-
-Функция заполнения выполняется внутри цепочки — после middleware и перед валидацией. Поэтому middleware видят ошибки разбора, а таймаут покрывает и разбор. Простая ошибка из неё становится `Invalid` с общим сообщением «invalid request»: текст декодера называет Go-типы и поля, поэтому он остаётся только в причине — для логов. Чтобы задать вид и точное безопасное сообщение, верните `*Error`.
-
-`ParamsType()` и `ResultType()` позволяют транспорту проверить маршруты на старте — например, отказать типу результата, который он не умеет отдавать.
-
-Пошаговое руководство с чек-листом: [Как написать свой App](./rockhandlers-transport).
+`Ctx` — это `context.Context`: передавайте его в базу, клиенты и каналы. `Next` не запускает следующий обработчик, если запрос уже отменён. `Timeout(d)` — middleware с дедлайном.
 
 ## Тестирование
 
 ```go
-res, err := rockhandlers.Run[*CreateResult](ctx, CreateOrder, &CreateParams{Qty: 1}) // P выводится
+res, err := tasks.Create.Call(ctx, &tasks.CreateParams{Token: "t", Title: "write docs"})
 ```
 
-`Run` прогоняет всю цепочку — middleware, валидацию, шаги — без транспорта. Шаги — обычные функции, их можно тестировать и по отдельности.
+`Call` проходит всё то же, что `Run`, только с готовыми параметрами: `Validate`, обработчики, `Normalize`.
 
-## Вне слоя
+## Для App
 
-- **Это задача транспортов:** стриминг (SSE, WebSocket), повторы, DLQ, prefetch, лимиты параллельности, протокольные middleware (CORS, gzip).
-- **Это задача вашего кода или каталога:** готовые шаги — auth, tenant, paging, кэш, логирование.
+```go
+response, err := pipeline.Run(ctx, func(params rockhandlers.Params) error {
+    return decode(req, params) // заполнить пустые параметры из запроса
+})
+// err → ответ по KindOf(err); response → ответ протокола
+```
+
+Подробно — [Как написать свой App](./rockhandlers-transport).

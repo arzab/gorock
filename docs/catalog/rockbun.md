@@ -3,7 +3,7 @@
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockbun/README_RU.md — правьте README в репозитории модуля. -->
 
 ::: tip Место в GOROCK · Services
-Клиент PostgreSQL на bun. Обычно — дочерний сервис внутри вашего, например `pkg/services/orders`. Его `Service` — это `Init` + `Stop`, поэтому его можно и зарегистрировать в каталоге напрямую: `rockservices.Add(c, Postgres, rockbun.NewService, cfg.Postgres)`. → [Как писать Service](/guide/services)
+Клиент PostgreSQL на bun. Обычно — дочерний сервис внутри вашего, например `pkg/services/orders`. Его `Service` — это `Init` + `Stop`, поэтому его можно и положить в `map` каталога: `"postgres": rockbun.NewService(cfg.Postgres)`. → [Как писать Service](/guide/services)
 :::
 
 ::: warning Перенесён из gorock-kit v0.2.0 как есть

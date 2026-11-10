@@ -1,15 +1,15 @@
 package services
 
 import (
+	"context"
+
 	"github.com/arzab/gorock-kit/rockservices"
 
 	"__MODULE__/pkg/services/logger"
 )
 
-// Keys: one per service, typed. Use them anywhere: services.Logger.Get().
-// A key declared here but not added in Register fails startup.
-var (
-	Logger = rockservices.NewKey[logger.Service]("logger")
+const (
+	LoggerName = "logger"
 )
 
 // Configs aggregates the configs of every service. Add one field per service.
@@ -17,15 +17,30 @@ type Configs struct {
 	Logger logger.Configs `config:",omitempty"`
 }
 
-// Register adds every service to the catalog. Add order = Init order; the
-// logger goes first so the others can log while they start.
+var catalog *rockservices.Catalog
+
+// Init creates the services from their configs and starts them in order:
+// the logger first, so the others can log while they start.
 //
-//	rockservices.Add(c, Orders, orders.NewService, cfg.Orders)
+//	RepositoryName: repository.NewService(cfg.Repository),   // in the map
+//	catalog.Init(ctx, LoggerName, RepositoryName)            // in the order
+func Init(ctx context.Context, cfg Configs) error {
+	catalog = rockservices.New(map[string]rockservices.Service{
+		LoggerName: logger.NewService(cfg.Logger),
+	})
+	return catalog.Init(ctx, LoggerName)
+}
+
+// Stop stops the services in reverse order.
+func Stop() error { return catalog.Stop() }
+
+// Getters, one per service:
 //
-// A shared dependency is passed as the value Add returned:
-//
-//	pg := rockservices.Add(c, Postgres, postgres.NewService, cfg.Postgres)
-//	rockservices.Add(c, Orders, func(cfg orders.Configs) orders.Service { return orders.NewService(cfg, pg) }, cfg.Orders)
-func Register(c *rockservices.Catalog, cfg Configs) {
-	rockservices.Add(c, Logger, logger.NewService, cfg.Logger)
+//	func Repository() repository.Service { return catalog.Get(RepositoryName).(repository.Service) }
+
+// UseCatalog swaps the catalog — for tests. They must not use t.Parallel().
+func UseCatalog(c *rockservices.Catalog) (restore func()) {
+	prev := catalog
+	catalog = c
+	return func() { catalog = prev }
 }

@@ -9,15 +9,15 @@ Config — переменные и константы проекта и ссыл
 У каждого сервиса и App есть структура `Configs`. Слой собирает их, Main собирает слои, а файл повторяет эту структуру один к одному.
 
 ```go
-// pkg/services/orders/configs.go
+// pkg/services/repository/configs.go
 type Configs struct {
     Postgres rockbun.Configs
 }
 
 // pkg/services/services.go
 type Configs struct {
-    Logger logger.Configs `config:",omitempty"`
-    Orders orders.Configs
+    Logger     logger.Configs `config:",omitempty"`
+    Repository repository.Configs
 }
 
 // cmd/apps/apps.go
@@ -38,12 +38,12 @@ services:
   logger:
     level: info
     format: json
-  orders:
+  repository:
     postgres:
       host: ${DB_HOST:-localhost}
       user: ${DB_USER:-postgres}
       password: ${DB_PASSWORD}
-      database: ${DB_NAME:-orders}
+      database: ${DB_NAME:-tasks}
 
 apps:
   http:
@@ -91,7 +91,7 @@ cfg, err := rockconfig.InitFromFile[Configs]("./configs/configs.yaml")
 ```
 rockconfig: ./configs/configs.yaml: missing required fields:
   apps.http.port
-  services.orders.postgres.password (empty)
+  services.repository.postgres.password (empty)
 ```
 
 - **Неизвестный ключ — ошибка:** опечатка `requst_timeout` не превратится тихо в значение по умолчанию. Если файл читают несколько программ — `rockconfig.AllowUnknownKeys()`.

@@ -16,7 +16,7 @@ type CreateParams struct {
 	Title string `json:"title"`
 }
 
-// Validate runs before every step: check first, use later.
+// Validate runs before every handler: check first, use later.
 func (p *CreateParams) Validate() error {
 	if strings.TrimSpace(p.Title) == "" {
 		return rockhandlers.Invalid("invalid task").WithFields(map[string]string{"title": "required"})
@@ -24,17 +24,19 @@ func (p *CreateParams) Validate() error {
 	return nil
 }
 
-type CreateResult struct {
+type CreateResponse struct {
 	Task *models.Task `json:"task"`
 }
 
-var Create = rockhandlers.Chain("tasks.create", create)
+func (r *CreateResponse) Normalize() error { return nil }
 
-func create(c *rockhandlers.Ctx[*CreateParams, *CreateResult]) error {
-	task := &models.Task{ID: uuid.NewString(), Title: strings.TrimSpace(c.Params.Title), CreatedAt: time.Now().UTC()}
-	if err := services.Repository.Get().Insert(c, task); err != nil {
+var Create = rockhandlers.Chain(create)
+
+func create(c *rockhandlers.Ctx, params *CreateParams, response *CreateResponse) error {
+	task := &models.Task{ID: uuid.NewString(), Title: strings.TrimSpace(params.Title), CreatedAt: time.Now().UTC()}
+	if err := services.Repository().Insert(c, task); err != nil {
 		return fmt.Errorf("insert task: %w", err) // unexpected: 500, message hidden
 	}
-	c.Result.Task = task
+	response.Task = task
 	return nil
 }

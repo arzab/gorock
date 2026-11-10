@@ -1,13 +1,13 @@
 # Как писать App
 
-App — технология, через которую к проекту обращаются: HTTP-сервер, consumer очереди, планировщик, бот. Он заполняет параметры обработчика, вызывает его и переводит итог на язык своей технологии. Зачем так — на странице [Архитектура](/architecture/#_3-app).
+App — технология, через которую к проекту обращаются: HTTP-сервер, consumer очереди, планировщик, бот. Он заполняет параметры цепочки, запускает её и переводит итог на язык своей технологии. Зачем так — на странице [Архитектура](/architecture/#_3-app).
 
-Обычно App берётся готовым из [каталога](/catalog/), а вы только говорите ему, какой обработчик где висит. Свой App пишется, когда готового нет.
+Обычно App берётся готовым из [каталога](/catalog/), а вы только говорите ему, какая цепочка где висит. Свой App пишется, когда готового нет.
 
 ```
 cmd/apps/
-├── apps.go          какие App запущены + их Configs
-├── http.go          какой обработчик на каком методе и пути
+├── apps.go          какие App запущены + их Configs + Run
+├── http.go          какая цепочка на каком методе и пути
 └── <свой_app>/      свой App, если готового нет
 ```
 
@@ -15,23 +15,23 @@ cmd/apps/
 
 ## Готовый App: HTTP
 
-### Привязка обработчиков — `http.go`
+### Какая цепочка где висит — `http.go`
 
 ```go
 // cmd/apps/http.go
 func httpEndpoints() []rockhttp.Endpoint {
     return []rockhttp.Endpoint{
-        {Method: http.MethodPost, Path: "/orders", Handler: orders.Create, Status: http.StatusCreated},
-        {Method: http.MethodGet, Path: "/orders/{id}", Handler: orders.Get},
+        {Method: http.MethodPost, Path: "/tasks", Handler: tasks.Create, Status: http.StatusCreated},
+        {Method: http.MethodGet, Path: "/tasks/{id}", Handler: tasks.Get},
     }
 }
 ```
 
-Метод, путь и статус успеха — понятия HTTP, поэтому они здесь, а не в обработчике. Один и тот же обработчик можно привязать к нескольким App.
+Метод, путь и статус успеха — понятия HTTP, поэтому они здесь, а не в обработчике. Одну цепочку можно привязать к нескольким App.
 
-`Status` необязателен: по умолчанию успех — `200`, а пустой результат — `204`. Укажите `201`, если следуете REST-соглашению «создание → 201». Общий префикс (`/api/v1`) задаётся в конфиге App.
+`Status` необязателен: по умолчанию успех — `200`, пустой ответ — `204`. Укажите `201`, если следуете REST-соглашению «создание → 201». Общий префикс (`/api/v1`) задаётся в конфиге App.
 
-### Регистрация — `apps.go`
+### Запуск — `apps.go`
 
 ```go
 // cmd/apps/apps.go
@@ -39,35 +39,47 @@ type Configs struct {
     HTTP rockhttp.Config
 }
 
-func Register(e *rockengine.Engine, cfg Configs) {
-    http := rockhttp.New(cfg.HTTP, httpEndpoints()...).Use(middleware.Log)
-    e.MustRegister("http", http, rockengine.RestartPolicy{MaxRetries: 3, Delay: time.Second, ResetAfter: time.Minute})
+func Run(ctx context.Context, cfg Configs) error {
+    engine := rockengine.New(map[string]rockengine.App{
+        "http": rockhttp.New(cfg.HTTP, httpEndpoints()...).Use(middleware.Log),
+    })
+    return engine.Run(ctx, "http") // до SIGINT/SIGTERM или падения App
 }
 ```
 
-- **`Use(...)`** вешает общую обвязку обработчиков на все маршруты App.
-- **`RestartPolicy`** — что делать, если App упал: сколько раз перезапускать и с какой паузой.
-- **Порядок регистрации важен:** App останавливаются в обратном порядке. Регистрируйте HTTP последним — он остановится первым, пока остальные, от которых он зависит, ещё работают.
+- **`Use(...)`** вешает middleware на все цепочки App.
+- **Порядок в `Run` важен:** App останавливаются в обратном порядке. Ставьте HTTP последним — он остановится первым, пока остальные, от которых он зависит, ещё работают.
+- **Если App упал,** движок останавливает всё, и процесс перезапускает оркестратор. Без оркестратора — `rockengine.New(apps).WithRestarts(3, time.Second)`.
+
+### Как App находит цепочку
+
+В `Init` HTTP-App строит из `httpEndpoints()` обычный `http.ServeMux`. На каждый запрос маршрутизатор находит свою цепочку и вызывает её:
+
+```
+POST /tasks → ServeMux → tasks.Create.Run(ctx, разбор запроса)
+            → middleware → Validate → обработчики → Normalize
+            → ответ → JSON 201, или ошибка → 400 / 404 / 500
+```
 
 Что делает [rockhttp](/catalog/rockhttp):
-- **на входе** заполняет параметры по тегам `json`, `header`, `path`, `query`, `form`, включая встроенные структуры, и ограничивает размер тела;
-- **на выходе** отдаёт результат как JSON, а ошибки переводит в статусы: 400, 401, 403, 404, 409, 503, 504, 500 со скрытым текстом;
+- **на входе** заполняет параметры по тегам `json`, `header`, `path`, `query`, `form` и ограничивает размер тела;
+- **на выходе** отдаёт ответ как JSON, ошибки переводит в статусы, пустая цепочка — `501`;
 - **при остановке** дообрабатывает начатые запросы.
 
-Для файлов, редиректов и cookie есть особые типы результата и функции — смотрите страницу модуля.
+Для файлов, редиректов и cookie есть особые типы ответа и функции — смотрите страницу модуля.
 
 ---
 
-## Несколько App с одними обработчиками
+## Несколько App с одними цепочками
 
-Тот же `orders.Create` можно повесить на очередь. Это второй App со своей привязкой, а обработчик не меняется:
+Ту же `tasks.Create` можно повесить на очередь — это второй App со своей привязкой:
 
 ```go
-func Register(e *rockengine.Engine, cfg Configs) {
-    e.MustRegister("orders-queue", queue.New(cfg.Queue,
-        queue.Consumer{Queue: "orders.create", Handler: orders.Create}))
-    e.MustRegister("http", rockhttp.New(cfg.HTTP, httpEndpoints()...).Use(middleware.Log))
-}
+engine := rockengine.New(map[string]rockengine.App{
+    "queue": queue.New(cfg.Queue, queue.Consumer{Queue: "tasks.create", Handler: tasks.Create}),
+    "http":  rockhttp.New(cfg.HTTP, httpEndpoints()...).Use(middleware.Log),
+})
+return engine.Run(ctx, "queue", "http")
 ```
 
 `queue` здесь — App вашей очереди: готовый из каталога или свой.
@@ -76,28 +88,17 @@ func Register(e *rockengine.Engine, cfg Configs) {
 
 ## Свой App
 
-Свой App нужен, когда готового для вашей технологии нет. Цепочку, проверку параметров, перехват паник и middleware уже делает слой обработчиков. App пишет только свою технологию:
+Порядок цепочки, проверку параметров, перехват паник и middleware уже делает слой обработчиков. Свой App пишет только технологию:
 
 1. **принять обращение;**
-2. **заполнить параметры** — внутри вызова `route.Serve(ctx, fill)`;
-3. **перевести итог** по `rockhandlers.KindOf(err)` на язык технологии;
-4. **аккуратно остановиться.**
-
-Контракт App — три метода, их вызывает движок:
-
-```go
-type App interface {
-    Init(ctx context.Context) error // подготовиться: соединение, регистрация обработчиков
-    Exec(ctx context.Context) error // работать; отмена ctx — «заканчивай текущее и выходи»
-    Stop() []error                  // разблокировать Exec и дождаться текущей работы
-}
-```
-
-Ядро обработки одного обращения:
+2. **найти цепочку** по своей точке входа (очередь, команда, расписание);
+3. **запустить её** с функцией, которая раскладывает обращение в параметры;
+4. **перевести итог** по `rockhandlers.KindOf(err)` на язык технологии;
+5. **аккуратно остановиться.**
 
 ```go
-_, err := route.Serve(ctx, func(params any) error {
-    return json.Unmarshal(msg.Body, params) // простая ошибка → «неверные данные»
+response, err := pipeline.Run(ctx, func(params rockhandlers.Params) error {
+    return json.Unmarshal(msg.Body, params) // обычная ошибка → «неверные данные»
 })
 switch rockhandlers.KindOf(err) {
 case rockhandlers.KindNone:
@@ -109,21 +110,31 @@ default:
 }
 ```
 
-Подробное руководство с чек-листом — [Как написать свой App](/gorock-kit/rockhandlers-transport).
+Контракт App — три метода, их вызывает движок:
+
+```go
+type App interface {
+    Init(ctx context.Context) error // подготовиться: соединение, маршруты
+    Exec(ctx context.Context) error // работать; отмена ctx — «заканчивай и выходи»
+    Stop() []error                  // разблокировать Exec и дождаться текущей работы
+}
+```
+
+Подробно, с чек-листом — [Как написать свой App](/gorock-kit/rockhandlers-transport).
 
 ---
 
 ## Фоновая работа
 
-Работа без обращений извне — отправка накопленных событий, чистка старых данных — тоже App: у неё есть `Exec`, который работает до отмены контекста, и `Stop`. Обработчики ей не обязательны.
+Работа без обращений извне — отправка накопленных событий, чистка старых данных — тоже App: `Exec` работает до отмены контекста, `Stop` прибирается. Цепочки обработчиков ему не обязательны.
 
 ---
 
 ## Чего не делать
 
-- **Не класть бизнес-логику в App.** Он только переводит запрос и итог.
-- **Не задавать пути и очереди внутри обработчика.** Привязка — в `cmd/apps/`.
-- **Не повторять в своём App валидацию, recover и логирование ошибок обработчиков.** Это уже есть в слое обработчиков.
+- **Не класть бизнес-логику в App.** Он только переводит обращение и итог.
+- **Не задавать пути и очереди внутри обработчиков.** Привязка — в `cmd/apps/`.
+- **Не повторять в своём App проверку параметров, recover и логирование ошибок.** Это уже есть в слое обработчиков.
 - **Не делать `Stop`, который ждёт `Exec`.** `Stop` вызывается и тогда, когда `Exec` не запускался.
 
 → Дальше: [Main](/guide/main) · API: [rockengine](/gorock-kit/rockengine), [rockhttp](/catalog/rockhttp)
