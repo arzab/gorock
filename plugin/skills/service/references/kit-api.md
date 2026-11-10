@@ -1,4 +1,4 @@
-# GOROCK API (compact): gorock-kit v0.3.x core + gorock-catalog
+# GOROCK API (compact): gorock-kit v0.4.x core + gorock-catalog
 
 Core: `github.com/arzab/gorock-kit/<module>` — rockengine, rockconfig, rockservices, rockhandlers. Modules don't import each other.
 Catalog: `github.com/arzab/gorock-catalog/<module>` — rockhttp (on rockhandlers) and the modules moved as-is from kit v0.2.0 (rocklog, rockfiber, rockbus, rockcron, rocktelebot, rockbun, rockredis). Go 1.26+.
@@ -36,20 +36,19 @@ errors.Is(err, rockconfig.ErrMissingFields); errors.Is(err, rockconfig.ErrUnknow
 ```
 Tags: `config:"name"`, `config:",omitempty"`, `config:",default=8080"` (must be last option), `config:",env=VAR"`, `config:"-"`. Keys = snake_case of field names. File values: `${VAR}`, `${VAR:-default}`, `$${` = literal. Durations as strings.
 
-## rockservices — services layer
+## rockservices — services catalog
 
 ```go
-type Service interface { Name() string; Init(ctx context.Context) error; Stop() error }
+type Service interface { Init(ctx context.Context) error; Stop() error } // no Name(): the name belongs to the registration
 
-rockservices.Add(c, ctor func(C) S, cfg C) S   // calls ctor now; panics on nil, empty/duplicate Name(), ctor panic, Add after Init
-rockservices.Get[S](name) S                    // from the default catalog; panics on unknown name / wrong type
-rockservices.Init(ctx) error                   // in Add order; on failure stops the started ones in reverse
-rockservices.Stop() error                      // reverse order, joins errors, idempotent, timeout 30s names the hanging one
+rockservices.Add(c, name, ctor func(C) S, cfg C) S // calls ctor now; panics on empty/duplicate name, nil, ctor panic, Add after Init
+rockservices.Get[S](name) S                        // from the default catalog; panics on unknown name / wrong type
+rockservices.Init(ctx) error                       // in Add order; on failure closes the opened ones in reverse
+rockservices.Stop() error                          // reverse order, joins errors, idempotent, timeout 30s names the hanging one
 rockservices.Default() *Catalog; rockservices.New() *Catalog; c.WithStopTimeout(d); rockservices.GetFrom[S](c, name)
-prev := rockservices.SetDefault(c)             // tests only
+prev := rockservices.SetDefault(c)                 // tests only
 ```
-cmd/main: `services.Register(rockservices.Default(), cfg.Services)` → `rockservices.Init(ctx)` → `defer rockservices.Stop()` → `engine.Run()`.
-A constructor may `Get` services added **before** it (keep the reference, use it from Init on). Conventions: `const Name = "repository"` + `func Get() Service { return rockservices.Get[Service](Name) }` in the service package; reusable components take the name from config (`Name string \`config:",default=postgres"\``); extra ctor args via a closure.
+`pkg/services/services.go` holds the name constants (`const OrdersName = "orders"`), `Configs`, `Register(c, cfg)` and the getters (`func Orders() orders.Service { return rockservices.Get[orders.Service](OrdersName) }`). cmd/main: `services.Register(rockservices.Default(), cfg.Services)` → `rockservices.Init(ctx)` → `defer rockservices.Stop()` → `engine.Run()`. Shared dependency: register it first and pass it through a closure in `Register`. Two instances = two `Add` calls with two names. The logger is a service registered first.
 
 ## rockhandlers — transport-independent request handling
 
@@ -90,7 +89,7 @@ Params tags: `path:"id"` (pattern `{id}`), `query:"x"` (slice = repeated), `head
 Error → status: Invalid 400, Unauthorized 401, Forbidden 403, NotFound 404, Conflict 409, Unavailable 503, Timeout 504, Canceled 499 (no body), Internal 500 (message hidden). Body: `{code, status, kind, message, fields}`.
 `rockhttp.Config` keys: `port` (required), `prefix`, `shutdown_timeout` (30s), `read_timeout` (15s), `write_timeout` (0 = none), `max_body_bytes` (10 MiB), `internal_message`. Code only: `OnError(r, route, err)` (response write failures only — log request errors in a rockhandlers middleware), `Middleware []func(http.Handler) http.Handler` (CORS, gzip…).
 
-> The modules below were moved from gorock-kit v0.2.0 as-is (import path `github.com/arzab/gorock-catalog/<module>`). They are not on the new core yet: apps' handlers aren't rockhandlers routes, and rockbun/rockredis have no `Name()` — use them as **child services inside your own service** (e.g. `repository` owns `rockbun.Service` and calls its Init/Stop), never with `RegisterResource` (removed from the kit).
+> The modules below were moved from gorock-kit v0.2.0 as-is (import path `github.com/arzab/gorock-catalog/<module>`). rockbun and rockredis services are `Init` + `Stop`, so they fit rockservices directly (`rockservices.Add(c, PostgresName, rockbun.NewService, cfg.Postgres)`) or as a child inside your own service; never `RegisterResource` (removed from the kit). rocklog is configured by a logger service (see the skeleton). The Apps (rockfiber, rockbus, rockcron, rocktelebot) don't take rockhandlers routes yet.
 
 ## rocklog — logger (log/slog)
 
@@ -102,7 +101,7 @@ l := rocklog.With(fields...); l = rocklog.Named("db"); l.Info(...)
 ctx = rocklog.WithContext(ctx, fields...); rocklog.FromContext(ctx).Info(...)
 rocklog.ContextWithLogger(ctx, l); rocklog.New(cfg) Logger; rocklog.SetDefault(l)
 ```
-Levels: `LevelDebug LevelInfo LevelWarn LevelError LevelFatal`. Formats: `FormatText FormatJSON`. `rocklog.Config` is not file-loadable (io.Writer, ints) — map from your own Configs in `pkg/infra/logs`.
+Levels: `LevelDebug LevelInfo LevelWarn LevelError LevelFatal`. Formats: `FormatText FormatJSON`. `rocklog.Config` is not file-loadable (io.Writer, ints) — the logger service (`pkg/services/logger`) maps its own Configs to it in `Init`.
 
 ## rockfiber — HTTP App on Fiber v2 (older model)
 

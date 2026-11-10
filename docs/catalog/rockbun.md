@@ -2,12 +2,12 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockbun/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Toolkit · Services
-PostgreSQL через bun. Обычно — дочерний сервис внутри `pkg/services/repository`. → [Services](/architecture/services)
+::: tip Место в GOROCK · Services
+Клиент PostgreSQL на bun. Обычно — дочерний сервис внутри вашего, например `pkg/services/orders`. Его `Service` — это `Init` + `Stop`, поэтому его можно и зарегистрировать в каталоге напрямую: `rockservices.Add(c, PostgresName, rockbun.NewService, cfg.Postgres)`. → [Как писать Service](/guide/services)
 :::
 
 ::: warning Перенесён из gorock-kit v0.2.0 как есть
-Код и API — те же, что были в `github.com/arzab/gorock-kit/rockbun@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockbun`. Модуль ещё не переведён на новое ядро: у сервиса нет `Name()`, поэтому в [rockservices](/gorock-kit/rockservices) его добавляют внутри своего сервиса (repository владеет rockbun), а не напрямую; в README ниже он ещё регистрируется как ресурс движка — этого механизма в kit v0.3.0 нет.
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rockbun@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockbun`. Модуль ещё не переведён на новое ядро: в README ниже он регистрируется как ресурс движка (`RegisterResource`) — такого механизма в ядре больше нет; регистрируйте его через [rockservices](/gorock-kit/rockservices) или держите внутри своего сервиса.
 :::
 
 ```sh

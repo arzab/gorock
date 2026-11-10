@@ -2,8 +2,8 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockhttp/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Engine · Apps
-HTTP App в `cmd/apps` на `net/http`: принимает маршруты rockhandlers из `internal/delivery/endpoints` как `Endpoint{Method, Path, Handler}`. Экспериментальный. → [Apps](/architecture/apps), [Delivery](/architecture/delivery)
+::: tip Место в GOROCK · App
+HTTP App на `net/http`: в `cmd/apps/http.go` вы привязываете обработчики к методам и путям (`Endpoint{Method, Path, Handler}`), он заполняет параметры и переводит итог в HTTP. Экспериментальный. → [Как писать App](/guide/apps)
 :::
 
 ```sh

@@ -2,12 +2,12 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockcron/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Engine · Apps
-Планировщик — App в `cmd/apps`. Задачи описываются в `internal/delivery/jobs`. → [Apps](/architecture/apps)
+::: tip Место в GOROCK · App
+Планировщик — App в `cmd/apps`, запускает задачи по расписанию. → [Как писать App](/guide/apps)
 :::
 
 ::: warning Перенесён из gorock-kit v0.2.0 как есть
-Код и API — те же, что были в `github.com/arzab/gorock-kit/rockcron@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockcron`. Модуль ещё не переведён на новое ядро: задачи пока не на rockhandlers.
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rockcron@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockcron`. Модуль ещё не переведён на новое ядро: его задачи — не обработчики rockhandlers.
 :::
 
 ```sh

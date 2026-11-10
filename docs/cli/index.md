@@ -1,20 +1,21 @@
 # CLI
 
 ::: warning В разработке
-CLI `gorock` пока не выпущен. Всё, что он будет делать, можно сделать вручную — см. [Быстрый старт](/architecture/getting-started).
+CLI `gorock` пока не выпущен. Всё, что он будет делать, можно сделать вручную или через [плагин для Claude Code](/ai/).
 :::
 
-CLI будет генерировать шаблонный код по правилам архитектуры — слои, сервисы и endpoints одной командой, — чтобы вы тратили время на логику, а не на создание файлов.
+CLI будет генерировать шаблонный код по правилам архитектуры, чтобы вы тратили время на логику, а не на создание файлов:
 
-Например, генерация сервиса создаст `pkg/services/<name>/` с файлами `configs.go`, `interface.go`, `service.go`, а генерация HTTP endpoint — `internal/delivery/endpoints/<name>/` с `endpoint.go`, `handlers.go`, `params.go`, `response.go`.
-
----
+- **сервис** — `pkg/services/<name>/` с `configs.go`, `interface.go`, `service.go` и регистрацией в `services.go`;
+- **обработчик** — `internal/handlers/<domain>/<action>.go` с параметрами, результатом и цепочкой шагов;
+- **привязка к HTTP** — строка в `cmd/apps/http.go`;
+- **проект целиком** — все слои, Main и конфиг.
 
 ## Пока CLI нет
 
-Шаблоны всех файлов есть в документации:
+Шаблоны всех файлов есть в руководстве:
 
-- сервис — [Services](/architecture/services#реализация-сервиса)
-- endpoint — [Delivery](/architecture/delivery#http-endpoints)
-- свой App — [Apps](/architecture/apps#как-написать-свои-app)
-- весь проект целиком — [examples/taskapi](https://github.com/arzab/gorock/tree/main/examples/taskapi)
+- сервис — [Как писать Service](/guide/services)
+- обработчик — [Как писать Handler](/guide/handlers)
+- App и привязка — [Как писать App](/guide/apps)
+- проект целиком — [Быстрый старт](/guide/getting-started)

@@ -2,8 +2,8 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockhandlers/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Realm · Delivery
-Форма обработки запроса в `internal/delivery`: цепочки шагов с `Next`, Locals, middleware, валидацией и видами ошибок — без привязки к HTTP или очереди. Транспорт (App) только заполняет Params и переводит результат в свой протокол. → [Delivery](/architecture/delivery)
+::: tip Место в GOROCK · Handlers
+Обработчики в `internal/handlers`: цепочки шагов, параметры и результат, ошибки с видом, общие шаги, middleware — без привязки к технологии. App заполняет параметры и переводит итог на свой язык. → [Как писать Handler](/guide/handlers)
 :::
 
 ```sh
@@ -157,7 +157,7 @@ result, err := route.Serve(ctx, func(params any) error {
 
 `ParamsType()` и `ResultType()` позволяют транспорту проверить маршруты на старте — например, отказать типу результата, который он не умеет отдавать.
 
-Пошаговое руководство с чек-листом: [Как написать транспорт](./rockhandlers-transport).
+Пошаговое руководство с чек-листом: [Как написать свой App](./rockhandlers-transport).
 
 ## Тестирование
 

@@ -6,19 +6,16 @@ import (
 	"github.com/arzab/gorock-catalog/rockhttp"
 	"github.com/arzab/gorock-kit/rockengine"
 
-	"__MODULE__/internal/delivery/endpoints"
-	"__MODULE__/internal/delivery/middleware"
+	"__MODULE__/internal/handlers/middleware"
 )
 
 type Configs struct {
 	HTTP rockhttp.Config
 }
 
-// Register creates every App and registers it with the engine.
-// Apps stop in reverse registration order: register the HTTP server last so it
-// stops first, while the apps it depends on (event bus, consumers) still run.
+// Register creates every App. Apps stop in reverse order: register HTTP last
+// so it stops first, while the apps it depends on still run.
 func Register(e *rockengine.Engine, cfg Configs) {
-	http := rockhttp.New(cfg.HTTP, endpoints.All()...).
-		Use(middleware.Log) // rockhandlers middlewares around every route
+	http := rockhttp.New(cfg.HTTP, httpEndpoints()...).Use(middleware.Log)
 	e.MustRegister("http", http, rockengine.RestartPolicy{MaxRetries: 3, Delay: time.Second, ResetAfter: time.Minute})
 }

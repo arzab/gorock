@@ -1,99 +1,62 @@
 # gorock-kit
 
-Ядро GOROCK — структурные части, которые нужны каждому сервису, чем бы он ни занимался: как он стартует и останавливается, как настраивается, где живут сервисы и как обрабатывается запрос.
+Ядро GOROCK — часть работы, одинаковая в каждом проекте: каталог сервисов, механизм обработчиков, движок App и строгая загрузка настроек. Вы пишете то, что отличает ваш проект; ядро — то, что повторяется везде.
 
-Архитектура GOROCK говорит, **где** лежит код. gorock-kit даёт готовый код для мест, которые в каждом проекте одинаковые. Вам остаётся писать то, что уникально для проекта: бизнес-логику в Realm и обёртки над своими технологиями в Toolkit.
-
-[GitHub](https://github.com/arzab/gorock-kit) · [CHANGELOG](https://github.com/arzab/gorock-kit/blob/main/CHANGELOG.md) · текущая версия **v0.3.0** · требуется **Go 1.26+**
+[GitHub](https://github.com/arzab/gorock-kit) · [CHANGELOG](https://github.com/arzab/gorock-kit/blob/main/CHANGELOG.md) · текущая версия **v0.4.0** · требуется **Go 1.26+**
 
 ---
 
-## Модули и слои
+## Модули
 
-| Слой GOROCK | Модуль | Что даёт |
+| Слой | Модуль | Что даёт |
 |---|---|---|
-| **Engine** · `cmd/main` | [rockengine](./rockengine) | Жизненный цикл apps: запуск в порядке регистрации, остановка по одному в обратном порядке, рестарты, паники, таймаут |
-| **Configs** · `cmd/main` | [rockconfig](./rockconfig) | Один файл YAML/JSON → типизированный `Configs`, `${ENV}`, дефолты, проверка обязательных полей и опечаток |
-| **Toolkit · Services** · `pkg/services` | [rockservices](./rockservices) | Каталог сервисов: создать, хранить по имени, выдать, поднять до apps, остановить после |
-| **Realm · Delivery** · `internal/delivery` | [rockhandlers](./rockhandlers) | Обработка запроса без привязки к транспорту: цепочки шагов, `Next`, Locals, middleware, валидация, виды ошибок |
+| **Services** | [rockservices](./rockservices) | каталог сервисов: регистрация под именем, получение по имени откуда угодно, открытие до App и закрытие после |
+| **Handlers** | [rockhandlers](./rockhandlers) | обработчики: цепочки шагов, параметры и результат, ошибки с видом, общие шаги, middleware — без привязки к технологии |
+| **Main** | [rockengine](./rockengine) | движок App: запуск по порядку, перезапуск упавших, остановка по одному в обратном порядке |
+| **Config** | [rockconfig](./rockconfig) | один файл → типизированные `Configs`, `${ENV}`, значения по умолчанию, проверка пропусков и опечаток |
 
 Модули не импортируют друг друга, ставите только нужные. `rockconfig` зависит от `gopkg.in/yaml.v3`, остальные — только от стандартной библиотеки.
 
-Всё, что привязано к конкретной технологии — HTTP-сервер, PostgreSQL, Redis, логгер, шина событий, планировщик, Telegram-бот, — живёт в [каталоге](/catalog/).
-
----
-
-## Установка
+Готовые App и сервисы под конкретные технологии — HTTP, PostgreSQL, Redis, логгер — в [каталоге](/catalog/).
 
 ```sh
-go get github.com/arzab/gorock-kit/rockengine@latest
-go get github.com/arzab/gorock-kit/rockconfig@latest
 go get github.com/arzab/gorock-kit/rockservices@latest
 go get github.com/arzab/gorock-kit/rockhandlers@latest
+go get github.com/arzab/gorock-kit/rockengine@latest
+go get github.com/arzab/gorock-kit/rockconfig@latest
 ```
 
-Все модули выпускаются одной версией. Теги — по модулю (`rockengine/v0.3.0`), как того требует Go для репозитория из нескольких модулей.
+Все модули выпускаются одной версией; теги — по модулю (`rockservices/v0.4.0`).
 
 ---
 
-## Контракты, на которых всё держится
+## Контракты
 
-Модули не зависят друг от друга, но совместимы по сигнатурам.
+Модули не зависят друг от друга, но совместимы по сигнатурам — это контракты слоёв.
 
-**App** — то, что работает: HTTP-сервер, consumer, планировщик, бот. Им управляет [rockengine](./rockengine).
-
-```go
-type App interface {
-    Init(ctx context.Context) error // подготовка
-    Exec(ctx context.Context) error // работа; при отмене ctx — завершить текущее и вернуться
-    Stop() []error                  // разблокировать Exec, дождаться текущей работы
-}
-```
-
-**Service** — то, чем пользуются: репозиторий, кэш, хранилище. Их хранит и поднимает [rockservices](./rockservices).
+**Service** — то, что хранит каталог:
 
 ```go
 type Service interface {
-    Name() string                   // ключ в каталоге
     Init(ctx context.Context) error // открыть соединения
     Stop() error                    // закрыть
 }
 ```
 
-**Route** — то, что обрабатывает запрос: цепочка шагов [rockhandlers](./rockhandlers). App-транспорт (например, [rockhttp](/catalog/rockhttp)) заполняет параметры из своего протокола и переводит результат или ошибку обратно.
+**Обработчик** — цепочка шагов, которую вызывает App:
 
 ```go
-var CreateTask = rockhandlers.Chain("tasks.create", auth.Bearer, create)
-result, err := route.Serve(ctx, fill) // так его вызывает транспорт
+var Create = rockhandlers.Chain("orders.create", steps.Bearer, create)
 ```
 
----
-
-## Как это выглядит в проекте
-
-```
-cmd/main:  rockconfig → rockservices.Init → rockengine.Run (apps) → rockservices.Stop
-```
+**App** — то, чем управляет движок:
 
 ```go
-// cmd/main/main.go
-func Exec() error {
-    cfg, err := rockconfig.InitFromFile[Configs]("./configs/configs.yaml")
-    if err != nil {
-        return fmt.Errorf("init configs: %w", err)
-    }
-
-    ctx := context.Background()
-    services.Register(rockservices.Default(), cfg.Services) // pkg/services/services.go
-    if err := rockservices.Init(ctx); err != nil {
-        return fmt.Errorf("init services: %w", err) // ни один app не стартует
-    }
-    defer rockservices.Stop() // после остановки всех apps
-
-    engine := rockengine.NewEngine()
-    apps.Register(engine, cfg.Apps) // cmd/apps: rockhttp и другие
-    return engine.Run()             // до SIGINT/SIGTERM или падения app
+type App interface {
+    Init(ctx context.Context) error // подготовиться
+    Exec(ctx context.Context) error // работать до отмены ctx
+    Stop() []error                  // разблокировать Exec и дождаться текущей работы
 }
 ```
 
-Разбор по шагам — в [Быстром старте](/architecture/getting-started).
+Как всё это собирается в проект — [Архитектура](/architecture/) и [Быстрый старт](/guide/getting-started).

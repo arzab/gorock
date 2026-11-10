@@ -2,12 +2,12 @@
 
 <!-- Сгенерировано docs/scripts/gen-kit-pages.py из rockredis/README_RU.md — правьте README в репозитории модуля. -->
 
-::: tip Место в GOROCK · Toolkit · Services
-Redis для `pkg/services` (кэш, блокировки, pub/sub). → [Services](/architecture/services)
+::: tip Место в GOROCK · Services
+Клиент Redis: строки, хэши, списки, pub/sub. Дочерний сервис внутри вашего или самостоятельный сервис в каталоге: `rockservices.Add(c, CacheName, rockredis.NewService, cfg.Cache)`. → [Как писать Service](/guide/services)
 :::
 
 ::: warning Перенесён из gorock-kit v0.2.0 как есть
-Код и API — те же, что были в `github.com/arzab/gorock-kit/rockredis@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockredis`. Модуль ещё не переведён на новое ядро: у сервиса нет `Name()`, поэтому в [rockservices](/gorock-kit/rockservices) его добавляют внутри своего сервиса, а не напрямую; в README ниже он ещё регистрируется как ресурс движка — этого механизма в kit v0.3.0 нет.
+Код и API — те же, что были в `github.com/arzab/gorock-kit/rockredis@v0.2.0`, путь модуля теперь `github.com/arzab/gorock-catalog/rockredis`. Модуль ещё не переведён на новое ядро: в README ниже он регистрируется как ресурс движка (`RegisterResource`) — такого механизма в ядре больше нет; регистрируйте его через [rockservices](/gorock-kit/rockservices).
 :::
 
 ```sh
